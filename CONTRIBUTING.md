@@ -2,7 +2,7 @@
 
 First off, thank you for considering contributing to CSharpSpotiLyrics! Your interest is appreciated.
 
-While this project was primarily developed by me (S0rp), contributions that improve the tool and adhere to the guidelines below are welcome. Please remember the disclaimer noted in the README: this tool likely operates in a grey area regarding Spotify's Terms of Service, and contributors should be aware of the potential risks.
+While this project was primarily developed by me, contributions that improve the tool and adhere to the guidelines below are welcome. Please remember the disclaimer noted in the README: this tool likely operates in a grey area regarding Spotify's Terms of Service, and contributors should be aware of the potential risks.
 
 ## How Can I Contribute?
 
@@ -39,7 +39,7 @@ If you'd like to contribute code to fix a bug or implement a feature:
 7.  **Open a Pull Request (PR):**
     *   Navigate to the main repository and open a Pull Request from your branch to the main repository's `main` (or appropriate default) branch.
     *   Provide a clear title and description for your PR. Explain the purpose of the changes and reference any related issues (e.g., "Fixes #123").
-    *   I (S0rp) will review the PR. Be prepared to respond to feedback or make further changes if requested.
+    *   I will review the PR. Be prepared to respond to feedback or make further changes if requested.
 
 ## Development Setup
 
