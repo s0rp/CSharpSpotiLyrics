@@ -5,6 +5,7 @@ Date : 24.04.2025
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json; // Requires System.Net.Http.Json nuget package
 using System.Text.Json;
@@ -80,10 +81,45 @@ namespace CSharpSpotiLyrics.Core.Api
             {
                 try
                 {
-                    long serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                    string totp = SpotifyTotp.GenerateTotp();
+                    long serverTimeSeconds = -1;
+                    try
+                    {
+                        var responseSTS = await _httpClient.GetAsync(
+                            "https://open.spotify.com/server-time"
+                        );
+                        responseSTS.EnsureSuccessStatusCode();
+
+                        var jsonString = await responseSTS.Content.ReadAsStringAsync();
+                        using (JsonDocument document = JsonDocument.Parse(jsonString))
+                        {
+                            if (
+                                document.RootElement.TryGetProperty(
+                                    "serverTime",
+                                    out JsonElement serverTimeElement
+                                )
+                                && serverTimeElement.ValueKind == JsonValueKind.Number
+                            )
+                            {
+                                // Get the server time value as a long (Int64)
+                                serverTimeSeconds = serverTimeElement.GetInt64();
+                            }
+                            else
+                            {
+                                serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                                // Handle cases where the expected property is missing or not a number
+                                throw new InvalidOperationException(
+                                    "Failed to parse 'serverTime' from Spotify response."
+                                );
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    }
+                    string totp = SpotifyTotp.GenerateTotp(serverTimeSeconds);
                     string tokenUrl =
-                        $"https://open.spotify.com/get_access_token?reason=init&productType=web_player&totp={totp}&totpVer=5&ts={serverTimeSeconds}";
+                        $"https://open.spotify.com/get_access_token?reason=init&productType=web-player&totp={totp}&totpVer=5&ts={serverTimeSeconds}";
 
                     // Use a separate request message to control headers precisely for this specific call
                     using var requestMessage = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
@@ -101,7 +137,6 @@ namespace CSharpSpotiLyrics.Core.Api
 
                     var tokenResponse =
                         await response.Content.ReadFromJsonAsync<AccessTokenResponse>(_jsonOptions);
-
                     if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
                     {
                         throw new NotValidSpDcException(
