@@ -3,7 +3,11 @@
 A command-line tool built with C# to download lyrics from Spotify and save them as `.lrc` files. This tool can fetch lyrics for individual tracks, albums, playlists, your currently playing song, items from your library, or even attempt to find lyrics for local audio files based on their metadata. (Included with dll.)
 
 ---
+## Alternative Languages (For README)
+[Türkçe](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/README_TR.md)
+---
 
+---
 ⚠️ **Disclaimer** ⚠️
 
 **This project might violate Spotify's Terms of Service. Use it responsibly and at your own risk. The developers assume no liability for any consequences resulting from its use.**
