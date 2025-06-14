@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<PackageId>CSharpSpotiLyrics</PackageId>
+		<Authors>s0rp</Authors>
+		<Product>CSharpSpotiLyrics</Product>
+		<Title>CSharpSpotiLyrics</Title>
+		<Description>Spotify Lyrics Fetcher in C#
+		</Description>
+		<PackageProjectUrl>https://github.com/s0rp/CSharpSpotiLyrics</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/s0rp/CSharpSpotiLyrics</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageTags>spotify lyrics spotify-lyrics</PackageTags>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+	</PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>
