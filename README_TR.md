@@ -112,13 +112,13 @@ dotnet run -- [seçenekler] [<url_veya_yol>]
 ### Spotify Bağlantısı veya ID ile İndirme
 ```bash
 # Parça URL'si ile
-dotnet run -- "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # Albüm ID'si ile (URI Formatı)
-dotnet run -- "spotify:album:29D78864XbAUp6v"
+dotnet run -- "spotify:album:7DIlfmw6CAE1J8tp2QqgAJ"
 
 # Çalma Listesi Bağlantısı ile (içindeki tüm şarkıları indirir)
-dotnet run -- "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGg6cmY8"
+dotnet run -- "https://open.spotify.com/playlist/1tlptlfM0epuPkqRbLHvdj"
 ```
 
 ### Yerel Klasör Taraması ve Eşleştirme
@@ -142,10 +142,10 @@ dotnet run -- --user album
 ### Yapılandırma ve Sorun Giderme
 ```bash
 # Şarkı sözleri klasörde mevcut olsa bile indirmeyi zorla
-dotnet run -- --force "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- --force "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # Önbellekteki geçici anahtarları sıfırlayarak olası "Bad Request" hatalarını temizle
-dotnet run -- --clearcache "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- --clearcache "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # config.json dosyasının bulunduğu klasörü Dosya Gezgini'nde aç
 dotnet run -- --config open
