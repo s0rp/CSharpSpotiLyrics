@@ -1,3 +1,7 @@
+$$\large\color{green}\textbf{**Durum Güncellemesi (28/07/2026):** V2 Sürümü ÇALIŞIYOR!}$$
+
+### Canlı olarak deneyimleyin: https://sxrp.me
+
 # CSharpSpotiLyrics
 
 Spotify'dan senkronize şarkı sözlerini (`.lrc` dosyaları) indirmek için C# ile geliştirilmiş profesyonel bir komut satırı aracıdır (CLI).
