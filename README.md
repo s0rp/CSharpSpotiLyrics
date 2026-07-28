@@ -112,13 +112,13 @@ dotnet run -- [options] [<url_or_path>]
 ### Download via Spotify Link or ID
 ```bash
 # Track URL
-dotnet run -- "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # Album ID (URI Format)
-dotnet run -- "spotify:album:29D78864XbAUp6v"
+dotnet run -- "spotify:album:7DIlfmw6CAE1J8tp2QqgAJ"
 
 # Playlist Link (downloads all tracks inside)
-dotnet run -- "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGg6cmY8"
+dotnet run -- "https://open.spotify.com/playlist/1tlptlfM0epuPkqRbLHvdj"
 ```
 
 ### Local Library Matching
@@ -142,10 +142,10 @@ dotnet run -- --user album
 ### Configuration and Diagnostics
 ```bash
 # Force overwrite existing lyrics files
-dotnet run -- --force "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- --force "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # Clear temporary API hashes and TOTP keys to resolve bad request errors
-dotnet run -- --clearcache "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+dotnet run -- --clearcache "https://open.spotify.com/track/1DwscornXpj8fmOmYVlqZt"
 
 # Open the directory containing config.json in your File Explorer
 dotnet run -- --config open
