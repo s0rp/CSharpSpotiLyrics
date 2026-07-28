@@ -1,3 +1,7 @@
+$$\large\color{green}\textbf{**Status Update (28/07/2026):** V2 Release is WORKING!}$$
+
+### See it in live: https://sxrp.me
+
 # CSharpSpotiLyrics
 
 A professional C# command-line interface (CLI) application designed to retrieve and download synchronized lyrics (`.lrc` files) from Spotify. 
