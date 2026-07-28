@@ -4,11 +4,11 @@ Purpose Of File : Utility functions for string manipulation and file system oper
 Date : 24.04.2025
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
+using CSharpSpotiLyrics.Core.Models; // Assuming TrackInfo model exists here or nearby
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using CSharpSpotiLyrics.Core.Models; // Assuming TrackInfo model exists here or nearby
 
 namespace CSharpSpotiLyrics.Core.Utils
 {
@@ -29,6 +29,7 @@ namespace CSharpSpotiLyrics.Core.Utils
 
     public static class HelperFunctions
     {
+
         private static readonly Regex InvalidFileCharsRegex = new Regex(
             $"[{Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()))}]",
             RegexOptions.Compiled
@@ -92,6 +93,7 @@ namespace CSharpSpotiLyrics.Core.Utils
             return SanitizeFileName(result);
         }
 
+
         // Helper to prepare placeholder data from SpotifyTrack
         public static TrackInfoPlaceholder SanitizeTrackData(SpotifyTrack track)
         {
@@ -110,7 +112,7 @@ namespace CSharpSpotiLyrics.Core.Utils
                 TrackNumber = track.TrackNumber.ToString("D2"), // Pad with zero if needed
                 TotalTracks = track.Album?.TotalTracks.ToString("D2"), // Pad with zero if needed
                 ReleaseDate = track.Album?.ReleaseDate,
-                Explicit = track.Explicit ? "[E]" : ""
+                Explicit = track.Explicit ? "[E]" : "",
             };
         }
 

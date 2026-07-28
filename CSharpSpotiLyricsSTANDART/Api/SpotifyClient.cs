@@ -2,38 +2,162 @@
 Author : s*rp
 Purpose Of File : Client for interacting with Spotify internal and public APIs.
 Date : 24.04.2025
+Update: 23.01.2026 & 28.07.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
-*/
+- Revised 23.01.2026: 
+    - Replaced all V1 REST calls to New GraphQL
+- MINOR UPDT FROM 28.07.2026:
+    - Added Most of Graphql hashes. Also the logic of this codebase finally matched to LRPC_API's Codebase (A project that displays the lyrics of the song I am currently listening to on my website).
+
+- NOTE FROM 28.07.2026 : I have been running this code on my own site (https://sxrp.me) 24/7 for nearly 4-5 months on my Spot' Acc. I haven't encountered any significant issues, so feel free to use it!!!
+
+   ▄██▄                     ▄ █   █     █         ▄ ▄ ▄
+ ▄██████▄     ▄ ▄       ▄   █ █ ▄ █ ▄ █ █ █   ▄   █ █ █
+ ███▄▄███   ▄ █ █ ▄ ▄ ▄ █ ▄ █ █ █ █ █ █ █ █ ▄ █ ▄ █ █ █ ▄
+ ███▀▀███   ▀ █ █ █ ▀ ▀ █ █ █ █ █ █ █ █ █ █ █ █ █ █ █ █ ▀
+ ▀██████▀                   █ █   █ ▀ █ █ █   ▀   █ █ █
+   ▀██▀                     █ █   █     █         █
+
+(this scannable actually works tho, thanks to SpotifyAsciiScannables)
+ 
+ */
+
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json; // Requires System.Net.Http.Json nuget package
-using System.Runtime;
+using System.Net.Http.Json;
+using System.Numerics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using CSharpSpotiLyrics.Core.Exceptions;
 using CSharpSpotiLyrics.Core.Models;
+using static CSharpSpotiLyrics.Core.Api.SpotifyTotp;
 
 namespace CSharpSpotiLyrics.Core.Api
 {
+    #region GraphQL Base Models
+    public class PersistedQuery
+    {
+        [JsonPropertyName("version")]
+        public int Version { get; set; }
+
+        [JsonPropertyName("sha256Hash")]
+        public string Sha256Hash { get; set; }
+    }
+
+    public class GraphQLExtensions
+    {
+        [JsonPropertyName("persistedQuery")]
+        public PersistedQuery PersistedQuery { get; set; }
+    }
+
+    public class GraphQLBody
+    {
+        [JsonPropertyName("operationName")]
+        public string OperationName { get; set; }
+
+        [JsonPropertyName("variables")]
+        public object Variables { get; set; }
+
+        [JsonPropertyName("extensions")]
+        public GraphQLExtensions Extensions { get; set; }
+    }
+
+    public class GraphQLResponse<T>
+    {
+        [JsonPropertyName("data")]
+        public T Data { get; set; }
+    }
+    #endregion
+
+    #region GraphQL Data Models
+    public class AlbumOfTrack { public CoverArt coverArt { get; set; } public string uri { get; set; } }
+    public class Artists { public List<Item> items { get; set; } }
+    public class ArtistUnion { public string __typename { get; set; } public Goods goods { get; set; } public object headerImage { get; set; } public string id { get; set; } public Profile profile { get; set; } public Stats stats { get; set; } public string uri { get; set; } public Visuals visuals { get; set; } }
+    public class AssociationsV3 { public AudioAssociations audioAssociations { get; set; } }
+    public class AudioAssociations { public List<Item> items { get; set; } }
+    public class AvatarImage { public List<Source> sources { get; set; } }
+    public class Biography { public string text { get; set; } public string type { get; set; } }
+    public class Canvas { public string fileId { get; set; } public string type { get; set; } public string uri { get; set; } public string url { get; set; } }
+    public class ColorDark { public string hex { get; set; } }
+    public class Concerts { public List<Item> items { get; set; } public int? totalCount { get; set; } }
+    public class ContentRating { public string label { get; set; } }
+    public class Contributors { public List<Item> items { get; set; } }
+    public class CoverArt { public ExtractedColors extractedColors { get; set; } public List<Source> sources { get; set; } }
+    public class Credit { public string __typename { get; set; } public string artistName { get; set; } public string artistUri { get; set; } public bool? isArtistUriLinkable { get; set; } public string role { get; set; } }
+    public class CreditsTrait { public Contributors contributors { get; set; } public object sources { get; set; } }
+    public class Data { public ArtistUnion artistUnion { get; set; } public TrackUnion trackUnion { get; set; } public string __typename { get; set; } public Artists artists { get; set; } public bool? festival { get; set; } public Location location { get; set; } public string startDateIsoString { get; set; } public string title { get; set; } public string uri { get; set; } public string id { get; set; } public Profile profile { get; set; } public List<Source> sources { get; set; } public AlbumOfTrack albumOfTrack { get; set; } public AssociationsV3 associationsV3 { get; set; } public ContentRating contentRating { get; set; } public string name { get; set; } }
+    public class ExternalLinks { public List<Item> items { get; set; } }
+    public class ExtractedColors { public ColorDark colorDark { get; set; } }
+    public class Gallery { public List<Item> items { get; set; } }
+    public class Goods { public Concerts concerts { get; set; } }
+    public class CanvasJSON { public Data data { get; set; } }
+    public class Item { public Data data { get; set; } public TrackAudio trackAudio { get; set; } public string name { get; set; } public string url { get; set; } public string city { get; set; } public string country { get; set; } public int? numberOfListeners { get; set; } public string region { get; set; } public List<Source> sources { get; set; } public string role { get; set; } public RoleGroup roleGroup { get; set; } public string uri { get; set; } public string __typename { get; set; } public TrackOfVideo trackOfVideo { get; set; } public Profile profile { get; set; } }
+    public class Location { public string city { get; set; } public string name { get; set; } }
+    public class Merch { public List<object> items { get; set; } public int? totalCount { get; set; } }
+    public class Profile { public string name { get; set; } public Biography biography { get; set; } public ExternalLinks externalLinks { get; set; } public bool? verified { get; set; } }
+    public class RelatedVideos { public string __typename { get; set; } public List<Item> items { get; set; } public int? totalCount { get; set; } }
+    public class RoleGroup { public string name { get; set; } }
+    public class Root { public Data data { get; set; } }
+    public class Source { public int? maxHeight { get; set; } public int? maxWidth { get; set; } public string url { get; set; } public int? height { get; set; } public int? width { get; set; } public List<Item> items { get; set; } }
+    public class Stats { public int? followers { get; set; } public int? monthlyListeners { get; set; } public TopCities topCities { get; set; } public int? worldRank { get; set; } }
+    public class TopCities { public List<Item> items { get; set; } }
+    public class TrackAudio { public string _uri { get; set; } }
+    public class TrackOfVideo { public string __typename { get; set; } public string _uri { get; set; } public Data data { get; set; } }
+    public class TrackUnion { public string __typename { get; set; } public AssociationsV3 associationsV3 { get; set; } public Canvas canvas { get; set; } public List<Credit> credits { get; set; } public CreditsTrait creditsTrait { get; set; } public Merch merch { get; set; } public RelatedVideos relatedVideos { get; set; } }
+    public class Visuals { public AvatarImage avatarImage { get; set; } public Gallery gallery { get; set; } }
+
+    public class CustomArtistDetails
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string ImageUrl { get; set; }
+    }
+    #endregion
+
     public class SpotifyClient : IDisposable
     {
-        private const string UserAgent =
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.41 Safari/537.36";
+        private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36";
+        private const string ClientTokenUrl = "https://clienttoken.spotify.com/v1/clienttoken";
+        private const string WebPlayerClientVersion = "1.2.95.439.ga887f843";
+        private static readonly string TotpFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".SPOTIFYTOTP");
+        private static readonly string HashPath = Path.Combine(Directory.GetCurrentDirectory(), ".SPOTIFYHASH");
+
+        public Dictionary<string, string> OperationToHashTable = new Dictionary<string, string>
+        {
+            { "profileAttributes", "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced" },
+            { "fetchPlaylistMetadata","e4b2953f160e58e38ac025d79b5a9b3aceee5c4c716598e9830bfceb69faff5f" },
+            { "libraryV3","390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455" },
+            { "getAlbum","b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10" },
+            { "queryAlbumMerch", "3ef44ed6f17be67299538fe77faffab4075aeaf9e1085f10fc835592266711b5" },
+            { "areEntitiesInLibrary", "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed" },
+            { "isCurated", "e4ed1f91a2cc5415befedb85acf8671dc1a4bf3ca1a5b945a6386101a22e28a6" },
+            { "centralisedStatePlayerOptions", "e2dcfcab470854d4d1c7cb1a851438f14fe0a94d57db7f0b9dde492559d5395d" },
+            { "decorateContextTracks", "383de00240775c39a6afe0b1055dc562b2a3930894201f9762f3fc32a74971c7" },
+            { "fetchEntitiesForRecentlyPlayed", "cf5d2e94ffd82788470788ae1f6090cc3e9e774fb8fd383580634c6e6f50f7be" },
+            { "queryNpvArtist", "047c9c225967d41a763949a4db3f0493e901c9f8689a6537408aabf9beffc177" }
+        };
+
         private readonly HttpClient _httpClient;
         private readonly CookieContainer _cookieContainer;
+
         private string? _accessToken;
+        private string? _clientToken;
+        private string? _clientId;
         private bool _isLoggedIn = false;
+        private bool _TotpCached = false;
+        private DateTime _clientTokenExpiresAt = DateTime.MinValue;
 
         private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            // Add converters if needed for specific Spotify types (e.g., dates)
         };
 
         public SpotifyClient(string spDcToken)
@@ -44,42 +168,85 @@ namespace CSharpSpotiLyrics.Core.Api
             }
 
             _cookieContainer = new CookieContainer();
-            _cookieContainer.Add(
-                new Uri("https://open.spotify.com"),
-                new Cookie("sp_dc", spDcToken)
-            );
+            _cookieContainer.Add(new Uri("https://open.spotify.com"), new Cookie("sp_dc", spDcToken));
 
             var handler = new HttpClientHandler
             {
                 CookieContainer = _cookieContainer,
                 UseCookies = true,
-                AllowAutoRedirect = false // Mimic allow_redirects=False
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
 
             _httpClient = new HttpClient(handler);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-            _httpClient.DefaultRequestHeaders.Add("app-platform", "WebPlayer");
-            _httpClient.BaseAddress = new Uri("https://api.spotify.com/v1/"); // Base for standard API calls
+            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Language", "en;q=0.8");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("DNT", "1");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua", "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Google Chrome\";v=\"144\"");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua-mobile", "?0");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-ch-ua-platform", "\"Windows\"");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-fetch-dest", "empty");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-fetch-mode", "cors");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-fetch-site", "same-site");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("sec-gpc", "1");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://open.spotify.com/");
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Origin", "https://open.spotify.com");
+
+            _httpClient.BaseAddress = new Uri("https://api.spotify.com/v1/");
+        }
+
+        public void RemoveCaches()
+        {
+            try { if (File.Exists(TotpFilePath)) File.Delete(TotpFilePath); } catch { }
+            try { if (File.Exists(HashPath)) File.Delete(HashPath); } catch { }
+        }
+
+        private void UpdateHeaders()
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+            _httpClient.DefaultRequestHeaders.Remove("client-token");
+            _httpClient.DefaultRequestHeaders.Remove("client-id");
+            _httpClient.DefaultRequestHeaders.Remove("spotify-app-version");
+            _httpClient.DefaultRequestHeaders.Remove("app-platform");
+
+            if (!string.IsNullOrEmpty(_accessToken))
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+            }
+
+            if (!string.IsNullOrEmpty(_clientToken))
+            {
+                _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("client-token", _clientToken);
+            }
+
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("spotify-app-version", WebPlayerClientVersion);
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("app-platform", "WebPlayer");
+
+            if (!string.IsNullOrEmpty(_clientId))
+            {
+                _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("client-id", _clientId);
+            }
         }
 
         private async Task EnsureLoggedInAsync(bool forceRelogin = false)
         {
             if (!_isLoggedIn || forceRelogin)
             {
-                await LoginAsync();
+                await LoginAsync(forceRelogin);
             }
             if (string.IsNullOrEmpty(_accessToken))
             {
                 throw new NotValidSpDcException("Failed to obtain access token.");
             }
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                "Bearer",
-                _accessToken
-            );
+            UpdateHeaders();
         }
 
-        public async Task LoginAsync()
+        public async Task LoginAsync(bool force = false)
         {
+            Console.WriteLine("[Info] Attempting to log in using sp_dc token...");
             const int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
             {
@@ -88,414 +255,497 @@ namespace CSharpSpotiLyrics.Core.Api
                     long serverTimeSeconds = -1;
                     try
                     {
-                        var responseSTS = await _httpClient.GetAsync(
-                            "https://open.spotify.com/server-time"
-                        );
+                        using var requestSTS = new HttpRequestMessage(HttpMethod.Get, "https://open.spotify.com/api/server-time");
+                        var responseSTS = await _httpClient.SendAsync(requestSTS);
                         responseSTS.EnsureSuccessStatusCode();
 
                         var jsonString = await responseSTS.Content.ReadAsStringAsync();
                         using (JsonDocument document = JsonDocument.Parse(jsonString))
                         {
-                            if (
-                                document.RootElement.TryGetProperty(
-                                    "serverTime",
-                                    out JsonElement serverTimeElement
-                                )
-                                && serverTimeElement.ValueKind == JsonValueKind.Number
-                            )
+                            if (document.RootElement.TryGetProperty("serverTime", out JsonElement serverTimeElement) &&
+                                serverTimeElement.ValueKind == JsonValueKind.Number)
                             {
-                                // Get the server time value as a long (Int64)
                                 serverTimeSeconds = serverTimeElement.GetInt64();
                             }
                             else
                             {
                                 serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                                // Handle cases where the expected property is missing or not a number
-                                throw new InvalidOperationException(
-                                    "Failed to parse 'serverTime' from Spotify response."
-                                );
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    }
+
+                    long serverTimeMilliseconds = serverTimeSeconds * 1000;
+                    TotpReturn totp = SpotifyTotp.GenerateTotp(serverTimeMilliseconds, force);
+                    _TotpCached = totp.isCached;
+
+                    string tokenUrl = $"https://open.spotify.com/api/token?reason=init&productType=web-player&totp={totp.Totp}&totpServer={totp.Totp}&totpVer={totp.Version}";
+
+                    using var requestMessage = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
+                    using var response = await _httpClient.SendAsync(requestMessage);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new NotValidSpDcException($"Failed to get access token. Status: {response.StatusCode}. Content: {await response.Content.ReadAsStringAsync()}");
+                    }
+
+                    var responseContent = await response.Content.ReadAsStringAsync();
+
+                    using (JsonDocument doc = JsonDocument.Parse(responseContent))
+                    {
+                        var root = doc.RootElement;
+                        if (root.TryGetProperty("accessToken", out var tokenProp))
+                            _accessToken = tokenProp.GetString();
+                        if (root.TryGetProperty("clientId", out var clientIdProp))
+                            _clientId = clientIdProp.GetString();
+                    }
+
+                    if (string.IsNullOrEmpty(_accessToken))
+                    {
+                        throw new NotValidSpDcException("Received null or empty access token from Spotify.");
+                    }
+
+                    if (!_accessToken.StartsWith("BQ"))
+                    {
+                        Console.Error.WriteLine($"[Warning] Received potentially invalid token (attempt {i + 1})...");
+                        if (i < maxRetries - 1) continue;
+                        else throw new NotValidSpDcException($"Failed to obtain a valid access token after {maxRetries} attempts.");
+                    }
+
+                    _isLoggedIn = true;
+                    UpdateHeaders();
+
+                    if (string.IsNullOrEmpty(_clientToken) || DateTime.UtcNow > _clientTokenExpiresAt)
+                    {
+                        await GetClientTokenAsync(force);
+                        UpdateHeaders();
+                    }
+
+                    Console.WriteLine($"[Success] Logged in successfully. ClientId: {_clientId}");
+
+                    Dictionary<string, string> tempHashTable = OperationToHashTable;
+                    try
+                    {
+                        if (File.Exists(HashPath))
+                        {
+                            string jsonContent = File.ReadAllText(HashPath);
+                            Dictionary<string, string> loadedHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
+
+                            Console.WriteLine($"[Info] {loadedHashes?.Count} Hash(es) Loaded From .SPOTIFYHASH");
+
+                            if (loadedHashes != null && loadedHashes.Count > 0)
+                            {
+                                // Merge loaded hashes into the internal dictionary
+                                foreach (var kvp in loadedHashes)
+                                {
+                                    OperationToHashTable[kvp.Key] = kvp.Value;
+                                }
+                                Console.WriteLine($"[Success] Internal Hash Table Updated from cache.");
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                    }
-                    string totp = SpotifyTotp.GenerateTotp(serverTimeSeconds);
-                    string tokenUrl =
-                        $"https://open.spotify.com/get_access_token?reason=init&productType=web-player&totp={totp}&totpVer=5&ts={serverTimeSeconds}";
-
-                    // Use a separate request message to control headers precisely for this specific call
-                    using var requestMessage = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
-                    // No auth header for this specific request, relies on cookie
-
-                    using var response = await _httpClient.SendAsync(requestMessage);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        // Check specific status codes if necessary
-                        throw new NotValidSpDcException(
-                            $"Failed to get access token. Status: {response.StatusCode}. Content: {await response.Content.ReadAsStringAsync()}"
-                        );
+                        Console.WriteLine($"[Warning] Failed to load hashes from cache, using default fallback hashes. Error: {ex.Message}");
+                        OperationToHashTable = tempHashTable;
                     }
 
-                    var tokenResponse =
-                        await response.Content.ReadFromJsonAsync<AccessTokenResponse>(_jsonOptions);
-                    if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
-                    {
-                        throw new NotValidSpDcException(
-                            "Received null or empty access token from Spotify."
-                        );
-                    }
-
-                    // Check if token looks valid (starts with BQ)
-                    if (!tokenResponse.AccessToken.StartsWith("BQ"))
-                    {
-                        // Log this attempt or delay before retrying?
-                        Console.Error.WriteLine(
-                            $"Warning: Received potentially invalid token (attempt {i + 1}): {tokenResponse.AccessToken.Substring(0, Math.Min(10, tokenResponse.AccessToken.Length))}..."
-                        );
-                        if (i < maxRetries - 1)
-                            continue; // Retry
-                        else
-                            throw new NotValidSpDcException(
-                                $"Failed to obtain a valid access token after {maxRetries} attempts."
-                            );
-                    }
-
-                    _accessToken = tokenResponse.AccessToken;
-                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                        "Bearer",
-                        _accessToken
-                    );
-                    _isLoggedIn = true;
-                    Console.WriteLine($"Successfully obtained access token (attempt {i + 1}).");
-                    return; // Success
+                    return;
                 }
                 catch (Exception ex)
-                    when (ex is HttpRequestException
-                        || ex is JsonException
-                        || ex is NotValidSpDcException
-                    )
                 {
-                    Console.Error.WriteLine($"Login attempt {i + 1} failed: {ex.Message}");
-                    if (i == maxRetries - 1) // Last attempt failed
+                    Console.Error.WriteLine($"[Error] Login attempt {i + 1} failed: {ex.Message}");
+                    if (i == maxRetries - 1)
                     {
                         _isLoggedIn = false;
                         _accessToken = null;
-                        throw new NotValidSpDcException(
-                            "sp_dc provided is invalid or connection failed after multiple attempts.",
-                            ex
-                        );
+                        throw new NotValidSpDcException("sp_dc provided is invalid or connection failed after multiple attempts.", ex);
                     }
-                    await Task.Delay(500); // Short delay before retry
+                    await Task.Delay(500);
                 }
             }
-            _isLoggedIn = false;
-            _accessToken = null;
-            throw new NotValidSpDcException($"Failed to login after {maxRetries} attempts."); // Should not be reached ideally
+        }
+
+        private async Task GetClientTokenAsync(bool alreadyforced = false)
+        {
+            try
+            {
+                Console.WriteLine("[Info] Fetching Client Token...");
+
+                var payloadObj = new
+                {
+                    client_data = new
+                    {
+                        client_version = WebPlayerClientVersion,
+                        client_id = _clientId,
+                        js_sdk_data = new
+                        {
+                            device_brand = "unknown",
+                            device_model = "unknown",
+                            os = "windows",
+                            os_version = "NT 10.0",
+                            device_id = GenerateRandomHex(32),
+                            device_type = "computer"
+                        }
+                    }
+                };
+
+                string jsonPayload = JsonSerializer.Serialize(payloadObj);
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, ClientTokenUrl);
+                var content = new StringContent(jsonPayload, Encoding.UTF8);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                request.Content = content;
+
+                using var response = await _httpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.Error.WriteLine($"[Error] ClientToken Request Failed! Status: {response.StatusCode}");
+                    if (_TotpCached && !alreadyforced)
+                    {
+                        Console.WriteLine("[Warning] TOTP is cached. Forcing re-login to refresh TOTP and retry Client Token fetch.");
+                        await LoginAsync(force: true);
+                        return;
+                    }
+                    response.EnsureSuccessStatusCode();
+                }
+
+                var responseContent = await response.Content.ReadAsStringAsync();
+                using (JsonDocument doc = JsonDocument.Parse(responseContent))
+                {
+                    if (doc.RootElement.TryGetProperty("granted_token", out var grantedToken) &&
+                        grantedToken.TryGetProperty("token", out var tokenElem))
+                    {
+                        _clientToken = tokenElem.GetString();
+                        int ttl = 1209600;
+                        if (grantedToken.TryGetProperty("expires_after_seconds", out var expiresElem))
+                        {
+                            ttl = expiresElem.GetInt32();
+                        }
+
+                        _clientTokenExpiresAt = DateTime.UtcNow.AddSeconds(ttl);
+                        Console.WriteLine($"[Success] Client Token obtained.");
+                    }
+                    else
+                    {
+                        throw new Exception("JSON response did not contain 'granted_token.token'");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Warning] Failed to fetch Client Token: {ex.Message}. Continuing without it.");
+            }
+        }
+
+        private static string GenerateRandomHex(int length)
+        {
+            var random = new Random();
+            var buffer = new byte[length / 2];
+            random.NextBytes(buffer);
+            return BitConverter.ToString(buffer).Replace("-", "").ToLower();
+        }
+
+        private string GetHash(string operationName, string fallbackHash)
+        {
+            return OperationToHashTable.TryGetValue(operationName, out string hash) ? hash : fallbackHash;
+        }
+
+        private async Task<T> SendPathfinderRequest<T>(GraphQLBody body, string version = "v2")
+        {
+            await EnsureLoggedInAsync();
+            string url = $"https://api-partner.spotify.com/pathfinder/{version}/query";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            string jsonPayload = JsonSerializer.Serialize(body, _jsonOptions);
+
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            content.Headers.ContentType.CharSet = "UTF-8";
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+
+            return await response.Content.ReadFromJsonAsync<T>(_jsonOptions);
+        }
+
+        // ----------------------------------------------------
+        // RAW GRAPHQL ENDPOINTS (Returns JsonElement)
+        // ----------------------------------------------------
+
+        public async Task<JsonElement> GetLibraryV3RawAsync(string folderUri, int limit = 50, int offset = 0)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: libraryV3 for folder '{folderUri}'");
+            var body = new GraphQLBody
+            {
+                OperationName = "libraryV3",
+                Variables = new { filters = new string[] { }, order = (string)null, textFilter = "", features = new[] { "LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "PRERELEASES_V2", "CLIPS", "EVENTS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new string[] { }, folderUri = folderUri, includeFoldersWhenFlattening = true },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> FetchPlaylistMetadataRawAsync(string playlistUri, int limit = 100, int offset = 0)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: fetchPlaylistMetadata for '{playlistUri}'");
+            var body = new GraphQLBody
+            {
+                OperationName = "fetchPlaylistMetadata",
+                Variables = new { uri = playlistUri, offset = offset, limit = limit, enableWatchFeedEntrypoint = true },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchPlaylistMetadata", "e4b2953f160e58e38ac025d79b5a9b3aceee5c4c716598e9830bfceb69faff5f") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> QueryAlbumMerchAsync(string albumUri, string deviceId)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: queryAlbumMerch for '{albumUri}'");
+            var body = new GraphQLBody
+            {
+                OperationName = "queryAlbumMerch",
+                Variables = new { uri = albumUri, deviceInfo = new { deviceId = deviceId, deviceType = "computer", clientId = _clientId, clientVersion = WebPlayerClientVersion, productId = "1" } },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryAlbumMerch", "3ef44ed6f17be67299538fe77faffab4075aeaf9e1085f10fc835592266711b5") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> AreEntitiesInLibraryAsync(List<string> uris)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: areEntitiesInLibrary for {uris.Count} entities.");
+            var body = new GraphQLBody
+            {
+                OperationName = "areEntitiesInLibrary",
+                Variables = new { uris = uris },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("areEntitiesInLibrary", "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> IsCuratedAsync(List<string> uris)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: isCurated for {uris.Count} entities.");
+            var body = new GraphQLBody
+            {
+                OperationName = "isCurated",
+                Variables = new { uris = uris },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("isCurated", "e4ed1f91a2cc5415befedb85acf8671dc1a4bf3ca1a5b945a6386101a22e28a6") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> GetCentralisedStatePlayerOptionsAsync(string albumUri, string deviceId)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: centralisedStatePlayerOptions for '{albumUri}'");
+            var body = new GraphQLBody
+            {
+                OperationName = "centralisedStatePlayerOptions",
+                Variables = new { uri = albumUri, deviceInfo = new { deviceId = deviceId, deviceType = "computer", clientId = _clientId, clientVersion = WebPlayerClientVersion, productId = "1" } },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("centralisedStatePlayerOptions", "e2dcfcab470854d4d1c7cb1a851438f14fe0a94d57db7f0b9dde492559d5395d") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> DecorateContextTracksAsync(List<string> uris)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: decorateContextTracks for {uris.Count} entities.");
+            var body = new GraphQLBody
+            {
+                OperationName = "decorateContextTracks",
+                Variables = new { uris = uris },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("decorateContextTracks", "383de00240775c39a6afe0b1055dc562b2a3930894201f9762f3fc32a74971c7") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        public async Task<JsonElement> FetchEntitiesForRecentlyPlayedAsync(List<string> uris)
+        {
+            Console.WriteLine($"[Info] Executing GraphQL: fetchEntitiesForRecentlyPlayed for {uris.Count} entities.");
+            var body = new GraphQLBody
+            {
+                OperationName = "fetchEntitiesForRecentlyPlayed",
+                Variables = new { uris = uris },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchEntitiesForRecentlyPlayed", "cf5d2e94ffd82788470788ae1f6090cc3e9e774fb8fd383580634c6e6f50f7be") } }
+            };
+            return await SendPathfinderRequest<JsonElement>(body);
+        }
+
+        // ----------------------------------------------------
+        // TYPED GRAPHQL ENDPOINTS
+        // ----------------------------------------------------
+
+        public async Task<string?> GetCanvasUrlAsync(string artistIdOrUri, string trackIdOrUri)
+        {
+            await EnsureLoggedInAsync();
+            if (!artistIdOrUri.StartsWith("spotify:artist:")) artistIdOrUri = "spotify:artist:" + artistIdOrUri;
+            if (!trackIdOrUri.StartsWith("spotify:track:")) trackIdOrUri = "spotify:track:" + trackIdOrUri;
+
+            Console.WriteLine($"[Info] Fetching Canvas URL for track '{trackIdOrUri}'");
+
+            var body = new GraphQLBody
+            {
+                OperationName = "queryNpvArtist",
+                Variables = new { artistUri = artistIdOrUri, trackUri = trackIdOrUri, contributorsLimit = 10, contributorsOffset = 0, enableRelatedVideos = true, enableRelatedAudioTracks = false },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryNpvArtist", "047c9c225967d41a763949a4db3f0493e901c9f8689a6537408aabf9beffc177") } }
+            };
+
+            var result = await SendPathfinderRequest<GraphQLResponse<Data>>(body);
+            if (result.Data?.trackUnion?.canvas != null && !string.IsNullOrEmpty(result.Data.trackUnion.canvas.url) && result.Data.trackUnion.canvas.url.EndsWith(".mp4"))
+            {
+                Console.WriteLine($"[Success] Canvas URL found.");
+                return result.Data?.trackUnion?.canvas.url;
+            }
+
+            Console.WriteLine($"[Warning] No Canvas found for this track.");
+            return null;
+        }
+
+        public async Task<CustomArtistDetails?> GetArtistDetailsAsync(string artistUri)
+        {
+            await EnsureLoggedInAsync();
+            if (string.IsNullOrEmpty(artistUri)) return null;
+            string safeArtistId = artistUri.Replace("spotify:artist:", "");
+
+            if (!artistUri.StartsWith("spotify:artist:")) artistUri = "spotify:artist:" + artistUri;
+
+            Console.WriteLine($"[Info] Fetching Artist Details for '{artistUri}'");
+
+            var body = new GraphQLBody
+            {
+                OperationName = "queryNpvArtist",
+                Variables = new { artistUri = artistUri, trackUri = "", contributorsLimit = 1, contributorsOffset = 0, enableRelatedVideos = false, enableRelatedAudioTracks = false },
+                Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryNpvArtist", "047c9c225967d41a763949a4db3f0493e901c9f8689a6537408aabf9beffc177") } }
+            };
+
+            try
+            {
+                var result = await SendPathfinderRequest<JsonElement>(body);
+
+                var profile = result.GetProperty("data").GetProperty("artistUnion").GetProperty("profile");
+                string name = profile.GetProperty("name").GetString();
+
+                var visuals = result.GetProperty("data").GetProperty("artistUnion").GetProperty("visuals");
+                string imageUrl = visuals.GetProperty("avatarImage").GetProperty("sources")[0].GetProperty("url").GetString();
+
+                return new CustomArtistDetails { Id = safeArtistId, Name = name, ImageUrl = imageUrl };
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Error] Failed to fetch artist details: {ex.Message}");
+                return null;
+            }
         }
 
         public async Task<SpotifyUser?> GetMeAsync()
         {
             await EnsureLoggedInAsync();
+            Console.WriteLine("[Info] Fetching User Profile...");
             try
             {
-                var response = await _httpClient.GetAsync("me");
-
-                if (response.IsSuccessStatusCode)
+                var body = new GraphQLBody
                 {
-                    return await response.Content.ReadFromJsonAsync<SpotifyUser>(_jsonOptions);
-                }
-                else if (
-                    response.StatusCode == HttpStatusCode.Unauthorized
-                    || response.StatusCode == HttpStatusCode.Forbidden
-                )
+                    OperationName = "profileAttributes",
+                    Variables = new { },
+                    Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("profileAttributes", "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced") } }
+                };
+
+                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+
+                if (result?.Data?.Me == null) return null;
+
+                return new SpotifyUser
                 {
-                    // Token might have expired, try relogin once
-                    await EnsureLoggedInAsync(forceRelogin: true);
-                    var retryResponse = await _httpClient.GetAsync("me");
-
-                    if (!retryResponse.IsSuccessStatusCode)
-                    {
-                        throw new NotValidSpDcException(
-                            $"Failed to get user info even after relogin. Status: {retryResponse.StatusCode}"
-                        );
-                    }
-                    return await retryResponse.Content.ReadFromJsonAsync<SpotifyUser>(_jsonOptions);
-                }
-                else
-                {
-                    throw new HttpRequestException(
-                        $"Request failed with status code {response.StatusCode}"
-                    );
-                }
-            }
-            catch (HttpRequestException httpEx)
-            {
-                throw new ApiException($"HTTP request failed: {httpEx.Message}", httpEx);
-            }
-            catch (System.Text.Json.JsonException jsonEx)
-            {
-                throw new ApiException(
-                    $"Failed to parse user info JSON response: {jsonEx.Message}",
-                    jsonEx
-                );
-            }
-            catch (Exception ex) // Catch-all for other unexpected errors
-            {
-                // Avoid re-wrapping exceptions we already handled and threw specifically
-                if (ex is ApiException || ex is NotValidSpDcException)
-                    throw;
-
-                throw new ApiException($"Failed to get current user info: {ex.Message}", ex);
-            } //REVISED FOR NETSTANDART
-        }
-
-        public async Task<CurrentlyPlayingContext?> GetCurrentSongAsync()
-        {
-            await EnsureLoggedInAsync();
-            try
-            {
-                // Endpoint: https://api.spotify.com/v1/me/player/currently-playing
-                var response = await _httpClient.GetAsync(
-                    "me/player/currently-playing?market=from_token"
-                ); // Add market if needed
-
-                // Handle specific non-success cases first
-                if (response.StatusCode == HttpStatusCode.NoContent) // 204 No Content means nothing is playing
-                {
-                    return null;
-                }
-                if (response.StatusCode == HttpStatusCode.NotFound) // Sometimes happens if no active device
-                {
-                    return null;
-                }
-
-                if (
-                    response.StatusCode == HttpStatusCode.Unauthorized
-                    || response.StatusCode == HttpStatusCode.Forbidden
-                )
-                {
-                    await EnsureLoggedInAsync(forceRelogin: true);
-                    // Retry the request after re-login
-                    response = await _httpClient.GetAsync(
-                        "me/player/currently-playing?market=from_token"
-                    );
-
-                    // Check the retry response
-                    if (
-                        response.StatusCode == HttpStatusCode.NoContent
-                        || response.StatusCode == HttpStatusCode.NotFound
-                    )
-                        return null;
-
-                    try
-                    {
-                        response.EnsureSuccessStatusCode();
-                    }
-                    catch (HttpRequestException retryEx) // Catch exception from EnsureSuccessStatusCode on retry
-                    {
-                        throw new NoSongPlayingException(
-                            $"Failed to get current song even after relogin (Retry Status: {response.StatusCode}).",
-                            retryEx // Pass the exception from the failed EnsureSuccessStatusCode
-                        );
-                    }
-                    // If retry succeeded, fall through to read content
-                }
-                else // Original response was not 204, 404, 401, 403
-                {
-                    // Now ensure other potential errors are caught
-                    response.EnsureSuccessStatusCode(); // This will throw HttpRequestException for other non-success codes
-                }
-
-                // If we get here, the response (either original or retry) is successful
-                var content = await response.Content.ReadAsStringAsync();
-                if (string.IsNullOrWhiteSpace(content))
-                    return null; // Check for empty response body
-
-                return JsonSerializer.Deserialize<CurrentlyPlayingContext>(content, _jsonOptions);
-            }
-            catch (HttpRequestException ex)
-            {
-                throw new NoSongPlayingException(
-                    $"HTTP request failed while getting currently playing song: {ex.Message}",
-                    ex
-                );
-            }
-            catch (Exception ex) // Catch other exceptions like JSON parsing errors, or the NoSongPlayingException thrown above
-            {
-                // Avoid wrapping NoSongPlayingException in another one
-                if (ex is NoSongPlayingException)
-                    throw;
-
-                throw new NoSongPlayingException(
-                    $"Failed to get currently playing song: {ex.Message}",
-                    ex
-                );
-            } //REVISED FOR NETSTANDART
-        }
-
-        public async Task<LyricsResponse?> GetLyricsAsync(string trackId)
-        {
-            if (string.IsNullOrWhiteSpace(trackId))
-                throw new ArgumentNullException(nameof(trackId));
-            await EnsureLoggedInAsync();
-            // This uses the internal endpoint, requires auth header set by LoginAsync
-            string lyricsUrl =
-                $"https://spclient.wg.spotify.com/color-lyrics/v2/track/{trackId}?format=json&market=from_token";
-
-            HttpResponseMessage response = null; // Define outside try block to access in catch/finally if needed
-
-            try
-            {
-                // We need to use SendAsync to ensure headers like Authorization are correctly included
-                using var requestMessage = new HttpRequestMessage(HttpMethod.Get, lyricsUrl);
-                // Auth header should be set globally on _httpClient after successful login
-
-                response = await _httpClient.SendAsync(requestMessage);
-
-                if (response.StatusCode == HttpStatusCode.NotFound)
-                {
-                    return null; // No lyrics available for this track
-                }
-
-                // Explicitly check for auth errors *before* EnsureSuccessStatusCode
-                if (
-                    response.StatusCode == HttpStatusCode.Unauthorized
-                    || response.StatusCode == HttpStatusCode.Forbidden
-                )
-                {
-                    // Try relogin once
-                    await EnsureLoggedInAsync(forceRelogin: true);
-                    using var retryRequestMessage = new HttpRequestMessage(
-                        HttpMethod.Get,
-                        lyricsUrl
-                    );
-                    // Dispose the old response before making a new request
-                    response?.Dispose();
-                    response = await _httpClient.SendAsync(retryRequestMessage);
-
-                    if (response.StatusCode == HttpStatusCode.NotFound)
-                    {
-                        return null; // Still not found after relogin
-                    }
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var tempEx = new HttpRequestException(
-                            $"Response status code does not indicate success: {(int)response.StatusCode} ({response.ReasonPhrase})."
-                        );
-                        throw new LyricsNotFoundException(
-                            $"Failed to get lyrics for track {trackId} even after relogin. Status: {response.StatusCode}",
-                            tempEx // Pass the synthesized exception as inner
-                        );
-                    }
-                    // If successful after retry, execution will continue to ReadFromJsonAsync below
-                }
-
-                // If we get here, the status was not NotFound initially, and if it was Auth error,
-                response.EnsureSuccessStatusCode(); // Throw HttpRequestException for other non-success codes
-
-                var lyrics = await response.Content.ReadFromJsonAsync<LyricsResponse>(_jsonOptions);
-                return lyrics;
-            }
-            catch (HttpRequestException ex)
-            {
-                string statusCodeInfo =
-                    response != null ? $" (Status Code: {response.StatusCode})" : "";
-                Console.Error.WriteLine(
-                    $"HttpRequestException fetching lyrics for {trackId}{statusCodeInfo}: {ex}"
-                );
-                throw new LyricsNotFoundException(
-                    $"Failed to get lyrics for track {trackId}: {ex.Message}",
-                    ex
-                );
+                    Id = result.Data.Me.Profile.Username,
+                    DisplayName = result.Data.Me.Profile.Name,
+                    Country = "N/A",
+                    Product = "N/A"
+                };
             }
             catch (Exception ex)
             {
-                // Log the error for diagnostics
-                Console.Error.WriteLine($"Error fetching lyrics for {trackId}: {ex}");
-                throw new LyricsNotFoundException(
-                    $"Failed to get lyrics for track {trackId}: {ex.Message}",
-                    ex
-                );
-            }
-            finally
-            {
-                response?.Dispose();
-            } //REVISED FOR NETSTANDART
-        }
-
-        // --- Standard Web API Wrappers (Partial implementation based on Python code) ---
-
-        public async Task<SpotifyAlbum?> GetAlbumAsync(string albumId)
-        {
-            if (string.IsNullOrWhiteSpace(albumId))
-                throw new ArgumentNullException(nameof(albumId));
-            await EnsureLoggedInAsync();
-            try
-            {
-                return await _httpClient.GetFromJsonAsync<SpotifyAlbum>(
-                    $"albums/{albumId}",
-                    _jsonOptions
-                );
-            }
-            catch (Exception ex)
-            {
-                throw new ApiException($"Failed to get album {albumId}: {ex.Message}", ex);
-            }
-        }
-
-        public async Task<List<string>> GetAlbumTracksAsync(string albumId, int totalTracks)
-        {
-            if (string.IsNullOrWhiteSpace(albumId))
-                throw new ArgumentNullException(nameof(albumId));
-            await EnsureLoggedInAsync();
-            var trackIds = new List<string>();
-            int limit = 50; // Max limit for album tracks endpoint
-
-            try
-            {
-                for (int offset = 0; offset < totalTracks; offset += limit)
-                {
-                    var response = await _httpClient.GetFromJsonAsync<
-                        PagingObject<SimpleTrackObject>
-                    >($"albums/{albumId}/tracks?limit={limit}&offset={offset}", _jsonOptions);
-                    if (response?.Items != null)
-                    {
-                        trackIds.AddRange(
-                            response.Items.Where(t => t?.Id != null).Select(t => t.Id!)
-                        );
-                    }
-                    if (response?.Next == null)
-                        break; // Stop if no more pages
-                }
-                return trackIds.Where(id => !string.IsNullOrEmpty(id)).ToList(); // Filter out potential nulls just in case
-            }
-            catch (Exception ex)
-            {
-                throw new ApiException(
-                    $"Failed to get tracks for album {albumId}: {ex.Message}",
-                    ex
-                );
+                Console.WriteLine($"[Warning] GetMeAsync failed: {ex.Message}");
+                var cookieUser = _cookieContainer.GetCookies(new Uri("https://open.spotify.com"))["sp_user"]?.Value;
+                return new SpotifyUser { Id = cookieUser ?? "Unknown", DisplayName = cookieUser ?? "User", Country = "XX" };
             }
         }
 
         public async Task<SpotifyPlaylist?> GetPlaylistAsync(string playlistId)
         {
-            if (string.IsNullOrWhiteSpace(playlistId))
-                throw new ArgumentNullException(nameof(playlistId));
             await EnsureLoggedInAsync();
+            Console.WriteLine($"[Info] Fetching Playlist '{playlistId}'");
             try
             {
-                // You might need to request specific fields if the default response is too large or missing data
-                // string fields = "id,name,owner(display_name),tracks(total),collaborative,external_urls";
-                // return await _httpClient.GetFromJsonAsync<SpotifyPlaylist>($"playlists/{playlistId}?fields={fields}", _jsonOptions);
-                return await _httpClient.GetFromJsonAsync<SpotifyPlaylist>(
-                    $"playlists/{playlistId}",
-                    _jsonOptions
-                );
+                var body = new GraphQLBody
+                {
+                    OperationName = "fetchPlaylistMetadata",
+                    Variables = new { uri = $"spotify:playlist:{playlistId}", offset = 0, limit = 100, enableWatchFeedEntrypoint = true },
+                    Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchPlaylistMetadata", "e4b2953f160e58e38ac025d79b5a9b3aceee5c4c716598e9830bfceb69faff5f") } }
+                };
+
+                var result = await SendPathfinderRequest<GraphQLResponse<PlaylistData>>(body);
+                var plData = result?.Data?.PlaylistV2;
+
+                if (plData == null) return null;
+
+                var playlist = new SpotifyPlaylist
+                {
+                    Name = plData.Name,
+                    Description = plData.Description,
+                    Uri = plData.Uri,
+                    Owner = new SpotifyUser { DisplayName = plData.OwnerV2.Data.Name, Id = plData.OwnerV2.Data.Username },
+                    Images = new List<ImageObject>(),
+                    Tracks = new PagingObject<PlaylistItem> { Items = new List<PlaylistItem>(), Total = plData.Content.TotalCount }
+                };
+
+                if (plData.Images?.Items != null)
+                {
+                    foreach (var imgItem in plData.Images.Items)
+                    {
+                        if (imgItem.Sources != null)
+                        {
+                            foreach (var src in imgItem.Sources)
+                            {
+                                playlist.Images.Add(new ImageObject { Url = src.Url, Width = src.Width, Height = src.Height });
+                            }
+                        }
+                    }
+                }
+
+                if (plData.Content?.Items != null)
+                {
+                    foreach (var item in plData.Content.Items)
+                    {
+                        var trackData = item.ItemV2.Data;
+                        var track = new SpotifyTrack
+                        {
+                            Name = trackData.Name,
+                            Uri = trackData.Uri,
+                            DurationMs = trackData.TrackDuration.TotalMilliseconds,
+                            Artists = new List<SimpleArtistObject>(),
+                            Album = null
+                        };
+
+                        if (!string.IsNullOrEmpty(track.Uri) && track.Uri.Contains(":track:"))
+                        {
+                            track.Id = track.Uri.Split(':').Last();
+                        }
+
+                        if (trackData.Artists?.Items != null)
+                        {
+                            foreach (var art in trackData.Artists.Items)
+                            {
+                                track.Artists.Add(new SimpleArtistObject { Name = art.Profile.Name, Uri = art.Uri });
+                            }
+                        }
+
+                        playlist.Tracks.Items.Add(new PlaylistItem { Track = track });
+                    }
+                }
+
+                return playlist;
             }
             catch (Exception ex)
             {
@@ -505,103 +755,66 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<List<string>> GetPlaylistTracksAsync(string playlistId, int totalTracks)
         {
-            if (string.IsNullOrWhiteSpace(playlistId))
-                throw new ArgumentNullException(nameof(playlistId));
-            await EnsureLoggedInAsync();
-            var trackIds = new List<string>();
-            int limit = 100; // Max limit for playlist tracks endpoint
+            var pl = await GetPlaylistAsync(playlistId);
+            var ids = new List<string>();
+            if (pl?.Tracks?.Items != null)
+            {
+                ids.AddRange(pl.Tracks.Items.Select(i => i.Track.Id).Where(id => !string.IsNullOrEmpty(id)));
+            }
+            return ids;
+        }
 
+        public async Task<PagingObject<SimplePlaylistObject>?> GetCurrentUserPlaylistsAsync(int limit = 50, int offset = 0)
+        {
+            await EnsureLoggedInAsync();
+            Console.WriteLine("[Info] Fetching Current User Playlists...");
             try
             {
-                for (int offset = 0; offset < totalTracks; offset += limit)
+                var body = new GraphQLBody
                 {
-                    // Requesting only track IDs might be more efficient if that's all you need here
-                    // string fields = "items(track(id)),next";
-                    var response = await _httpClient.GetFromJsonAsync<PagingObject<PlaylistItem>>(
-                        $"playlists/{playlistId}/tracks?limit={limit}&offset={offset}",
-                        _jsonOptions
-                    );
-                    if (response?.Items != null)
+                    OperationName = "libraryV3",
+                    Variables = new { order = (object)null, textFilter = "", features = new[] { "LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "EVENTS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new object[] { }, folderUri = (object)null, includeFoldersWhenFlattening = true },
+                    Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
+                };
+
+                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+                var libItems = result?.Data?.Me?.LibraryV3?.Items;
+
+                if (libItems == null) return new PagingObject<SimplePlaylistObject> { Items = new List<SimplePlaylistObject>() };
+
+                var playlists = new List<SimplePlaylistObject>();
+                foreach (var item in libItems)
+                {
+                    if (item.Item?.Data != null && item.Item.Data.Uri.Contains(":playlist"))
                     {
-                        trackIds.AddRange(
-                            response
-                                .Items.Where(item => item?.Track?.Id != null) // Ensure track and track.id are not null
-                                .Select(item => item.Track.Id!)
-                        ); // Select the non-null track ID
+                        var plData = item.Item.Data;
+                        var simplePl = new SimplePlaylistObject
+                        {
+                            Name = plData.Name,
+                            Uri = plData.Uri,
+                            Description = plData.Description,
+                            Images = new List<ImageObject>()
+                        };
+
+                        if (plData.Uri.Contains(":playlist:"))
+                            simplePl.Id = plData.Uri.Split(':').Last();
+
+                        if (plData.Images?.Items != null)
+                        {
+                            foreach (var imgItem in plData.Images.Items)
+                            {
+                                if (imgItem.Sources != null)
+                                {
+                                    foreach (var src in imgItem.Sources)
+                                        simplePl.Images.Add(new ImageObject { Url = src.Url, Width = src.Width, Height = src.Height });
+                                }
+                            }
+                        }
+                        playlists.Add(simplePl);
                     }
-                    if (response?.Next == null)
-                        break; // Stop if no more pages
                 }
-                return trackIds.Where(id => !string.IsNullOrEmpty(id)).ToList(); // Filter out potential nulls
-            }
-            catch (Exception ex)
-            {
-                throw new ApiException(
-                    $"Failed to get tracks for playlist {playlistId}: {ex.Message}",
-                    ex
-                );
-            }
-        }
 
-        public async Task<TracksResponse?> GetTracksAsync(IEnumerable<string> trackIds)
-        {
-            if (trackIds == null || !trackIds.Any())
-                throw new ArgumentNullException(nameof(trackIds));
-            await EnsureLoggedInAsync();
-            // Spotify API limit is 50 IDs per request
-            if (trackIds.Count() > 50)
-                throw new ArgumentException(
-                    "Cannot request more than 50 tracks at once.",
-                    nameof(trackIds)
-                );
-
-            string idsParam = string.Join(",", trackIds);
-            try
-            {
-                return await _httpClient.GetFromJsonAsync<TracksResponse>(
-                    $"tracks?ids={idsParam}",
-                    _jsonOptions
-                );
-            }
-            catch (Exception ex)
-            {
-                throw new ApiException($"Failed to get tracks: {ex.Message}", ex);
-            }
-        }
-
-        public async Task<SearchResult?> SearchAsync(string query, string type, int limit)
-        {
-            if (string.IsNullOrWhiteSpace(query))
-                throw new ArgumentNullException(nameof(query));
-            await EnsureLoggedInAsync();
-            string encodedQuery = Uri.EscapeDataString(query);
-            try
-            {
-                return await _httpClient.GetFromJsonAsync<SearchResult>(
-                    $"search?q={encodedQuery}&type={type}&limit={limit}",
-                    _jsonOptions
-                );
-            }
-            catch (Exception ex)
-            {
-                throw new ApiException($"Search failed: {ex.Message}", ex);
-            }
-        }
-
-        // Methods for User Interaction (Playlists/Albums) - Fetch data only, selection happens in Console UI
-
-        public async Task<PagingObject<SimplePlaylistObject>?> GetCurrentUserPlaylistsAsync(
-            int limit = 50,
-            int offset = 0
-        )
-        {
-            await EnsureLoggedInAsync();
-            try
-            {
-                return await _httpClient.GetFromJsonAsync<PagingObject<SimplePlaylistObject>>(
-                    $"me/playlists?limit={limit}&offset={offset}",
-                    _jsonOptions
-                );
+                return new PagingObject<SimplePlaylistObject> { Items = playlists, Total = playlists.Count };
             }
             catch (Exception ex)
             {
@@ -609,29 +822,360 @@ namespace CSharpSpotiLyrics.Core.Api
             }
         }
 
-        public async Task<PagingObject<SavedAlbumObject>?> GetCurrentUserSavedAlbumsAsync(
-            int limit = 50,
-            int offset = 0
-        )
+        public async Task<SpotifyAlbum?> GetAlbumAsync(string albumId)
+        {
+            await EnsureLoggedInAsync();
+            Console.WriteLine($"[Info] Fetching Album '{albumId}'");
+            try
+            {
+                var body = new GraphQLBody
+                {
+                    OperationName = "getAlbum",
+                    Variables = new { uri = $"spotify:album:{albumId}", locale = "", offset = 0, limit = 50 },
+                    Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("getAlbum", "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10") } }
+                };
+
+                var result = await SendPathfinderRequest<GraphQLResponse<AlbumData>>(body);
+                var albData = result?.Data?.AlbumUnion;
+
+                if (albData == null) return null;
+
+                var album = new SpotifyAlbum
+                {
+                    Id = albumId,
+                    Name = albData.Name,
+                    Uri = albData.Uri,
+                    Type = "album",
+                    AlbumType = "album",
+                    Label = albData.Label,
+                    ReleaseDate = albData.Date?.IsoString,
+                    ReleaseDatePrecision = albData.Date?.Precision?.ToLower(),
+                    TotalTracks = albData.TracksV2?.TotalCount ?? 0,
+                    Images = new List<ImageObject>(),
+                    Artists = new List<SimpleArtistObject>(),
+                    Copyrights = new List<CopyrightObject>(),
+                    ExternalUrls = new Dictionary<string, string>(),
+                    Tracks = new PagingObject<SimpleTrackObject> { Items = new List<SimpleTrackObject>(), Total = albData.TracksV2?.TotalCount ?? 0 }
+                };
+
+                if (!string.IsNullOrEmpty(albData.SharingInfo?.ShareUrl))
+                    album.ExternalUrls["spotify"] = albData.SharingInfo.ShareUrl;
+                else if (!string.IsNullOrEmpty(albumId))
+                    album.ExternalUrls["spotify"] = $"https://open.spotify.com/album/{albumId}";
+
+                if (albData.Copyright?.Items != null)
+                {
+                    foreach (var c in albData.Copyright.Items)
+                        album.Copyrights.Add(new CopyrightObject { Text = c.Text, Type = c.Type });
+                }
+
+                if (albData.CoverArt?.Sources != null)
+                {
+                    foreach (var src in albData.CoverArt.Sources)
+                    {
+                        if (!string.IsNullOrEmpty(src.Url))
+                            album.Images.Add(new ImageObject { Url = src.Url, Width = src.Width, Height = src.Height });
+                    }
+                }
+
+                if (albData.Artists?.Items != null)
+                {
+                    foreach (var art in albData.Artists.Items)
+                    {
+                        if (art.Profile == null) continue;
+
+                        var artId = art.Uri?.Split(':').LastOrDefault();
+                        var simpleArtist = new SimpleArtistObject { Name = art.Profile.Name, Uri = art.Uri, Id = artId, Type = "artist", ExternalUrls = new Dictionary<string, string>() };
+
+                        if (!string.IsNullOrEmpty(artId))
+                            simpleArtist.ExternalUrls["spotify"] = $"https://open.spotify.com/artist/{artId}";
+
+                        album.Artists.Add(simpleArtist);
+                    }
+                }
+
+                if (albData.TracksV2?.Items != null)
+                {
+                    foreach (var item in albData.TracksV2.Items)
+                    {
+                        var tData = item.Track;
+                        if (tData == null) continue;
+
+                        int durationMs = tData.Duration?.TotalMilliseconds ?? tData.TrackDuration?.TotalMilliseconds ?? 0;
+                        var trackId = !string.IsNullOrEmpty(tData.Uri) ? tData.Uri.Split(':').LastOrDefault() : null;
+
+                        var track = new SimpleTrackObject
+                        {
+                            Id = trackId,
+                            Name = tData.Name,
+                            Uri = tData.Uri,
+                            TrackNumber = tData.TrackNumber,
+                            DiscNumber = tData.DiscNumber,
+                            DurationMs = durationMs,
+                            Type = "track",
+                            Explicit = (tData.ContentRating?.Label?.Equals("EXPLICIT", StringComparison.OrdinalIgnoreCase) == true),
+                            Artists = new List<SimpleArtistObject>(),
+                            ExternalUrls = new Dictionary<string, string>()
+                        };
+
+                        if (!string.IsNullOrEmpty(trackId))
+                            track.ExternalUrls["spotify"] = $"https://open.spotify.com/track/{trackId}";
+
+                        if (tData.Artists?.Items != null)
+                        {
+                            foreach (var art in tData.Artists.Items)
+                            {
+                                if (art.Profile == null) continue;
+
+                                var tArtId = art.Uri?.Split(':').LastOrDefault();
+                                var tArtist = new SimpleArtistObject { Name = art.Profile.Name, Uri = art.Uri, Id = tArtId, Type = "artist" };
+
+                                if (!string.IsNullOrEmpty(tArtId))
+                                    tArtist.ExternalUrls["spotify"] = $"https://open.spotify.com/artist/{tArtId}";
+
+                                track.Artists.Add(tArtist);
+                            }
+                        }
+
+                        album.Tracks.Items.Add(track);
+                    }
+                }
+
+                return album;
+            }
+            catch (Exception ex)
+            {
+                throw new ApiException($"Failed to get album {albumId}: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<List<string>> GetAlbumTracksAsync(string albumId, int totalTracks)
+        {
+            var album = await GetAlbumAsync(albumId);
+            var ids = new List<string>();
+            if (album?.Tracks?.Items != null)
+            {
+                ids.AddRange(album.Tracks.Items.Select(t => t.Id).Where(id => !string.IsNullOrEmpty(id)));
+            }
+            return ids;
+        }
+
+        public async Task<SearchResult?> SearchAsync(string query, string type, int limit)
+        {
+            await EnsureLoggedInAsync();
+            Console.WriteLine("[Warning] Search via GraphQL not fully implemented (missing reliable hash). Returning empty.");
+            return new SearchResult();
+        }
+
+        public async Task<PagingObject<SavedAlbumObject>?> GetCurrentUserSavedAlbumsAsync(int limit = 50, int offset = 0)
+        {
+            await EnsureLoggedInAsync();
+            Console.WriteLine("[Info] Fetching Current User Saved Albums...");
+            try
+            {
+                var body = new GraphQLBody
+                {
+                    OperationName = "libraryV3",
+                    Variables = new { order = (object)null, textFilter = "", features = new[] { "ALBUMS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new object[] { }, folderUri = (object)null, includeFoldersWhenFlattening = true },
+                    Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
+                };
+
+                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+                var items = result?.Data?.Me?.LibraryV3?.Items;
+
+                var savedAlbums = new List<SavedAlbumObject>();
+
+                if (items != null)
+                {
+                    foreach (var item in items)
+                    {
+                        if (item.Item?.Data != null && item.Item.Data.Uri.Contains(":album"))
+                        {
+                            var data = item.Item.Data;
+                            var album = new SpotifyAlbum { Name = data.Name, Uri = data.Uri, Images = new List<ImageObject>() };
+
+                            if (data.Images?.Items != null)
+                            {
+                                foreach (var imgItem in data.Images.Items)
+                                {
+                                    if (imgItem.Sources != null)
+                                    {
+                                        foreach (var src in imgItem.Sources)
+                                            album.Images.Add(new ImageObject { Url = src.Url, Width = src.Width, Height = src.Height });
+                                    }
+                                }
+                            }
+
+                            if (data.Uri.Contains(":album:"))
+                                album.Id = data.Uri.Split(':').Last();
+
+                            savedAlbums.Add(new SavedAlbumObject { Album = album });
+                        }
+                    }
+                }
+
+                return new PagingObject<SavedAlbumObject> { Items = savedAlbums, Total = savedAlbums.Count };
+            }
+            catch (Exception ex)
+            {
+                throw new ApiException($"Failed to get saved albums: {ex.Message}", ex);
+            }
+        }
+
+        // ----------------------------------------------------
+        // REST ENDPOINTS
+        // ----------------------------------------------------
+
+        public async Task<TracksResponse?> GetTracksAsync(IEnumerable<string> trackIds)
+        {
+            if (trackIds == null || !trackIds.Any()) throw new ArgumentNullException(nameof(trackIds));
+            await EnsureLoggedInAsync();
+
+            Console.WriteLine($"[Info] Fetching Tracks metadata for {trackIds.Count()} items via REST...");
+            var spotifyTracks = new List<SpotifyTrack>();
+
+            foreach (var trackId in trackIds)
+            {
+                try
+                {
+                    string hexId = SpotifyIdConverter.Base62ToHex(trackId);
+                    string url = $"https://spclient.wg.spotify.com/metadata/4/track/{hexId}?market=from_token";
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+                    var response = await _httpClient.SendAsync(request);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.Error.WriteLine($"[Error] Failed to fetch metadata for {trackId}. Status: {response.StatusCode}");
+                        continue;
+                    }
+
+                    var metadata = await response.Content.ReadFromJsonAsync<MetadataTrackResponse>(_jsonOptions);
+                    if (metadata != null)
+                    {
+                        spotifyTracks.Add(MapMetadataToSpotifyTrack(metadata, trackId));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[Error] Error fetching track {trackId}: {ex.Message}");
+                }
+            }
+
+            return new TracksResponse { Tracks = spotifyTracks };
+        }
+
+        private SpotifyTrack MapMetadataToSpotifyTrack(MetadataTrackResponse meta, string originalId)
+        {
+            var track = new SpotifyTrack
+            {
+                Id = originalId,
+                Name = meta.Name,
+                DurationMs = meta.Duration,
+                Type = "track",
+                Uri = meta.CanonicalUri ?? $"spotify:track:{originalId}",
+                Artists = new List<SimpleArtistObject>(),
+                Album = new SimpleAlbumObject { Name = meta.Album?.Name, Images = new List<ImageObject>() }
+            };
+
+            if (meta.Artist != null)
+            {
+                foreach (var art in meta.Artist)
+                    track.Artists.Add(new SimpleArtistObject { Name = art.Name });
+            }
+
+            if (meta.Album?.CoverGroup?.Image != null)
+            {
+                foreach (var img in meta.Album.CoverGroup.Image)
+                {
+                    if (!string.IsNullOrEmpty(img.FileId))
+                        track.Album.Images.Add(new ImageObject { Url = $"https://i.scdn.co/image/{img.FileId}", Width = img.Width, Height = img.Height });
+                }
+            }
+
+            return track;
+        }
+
+        public async Task<CurrentlyPlayingContext?> GetCurrentSongAsync()
         {
             await EnsureLoggedInAsync();
             try
             {
-                return await _httpClient.GetFromJsonAsync<PagingObject<SavedAlbumObject>>(
-                    $"me/albums?limit={limit}&offset={offset}",
-                    _jsonOptions
-                );
+                var response = await _httpClient.GetAsync("me/player/currently-playing?market=from_token");
+                if (response.StatusCode == HttpStatusCode.NoContent || response.StatusCode == HttpStatusCode.NotFound) return null;
+
+                response.EnsureSuccessStatusCode();
+                var content = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(content)) return null;
+
+                return JsonSerializer.Deserialize<CurrentlyPlayingContext>(content, _jsonOptions);
             }
             catch (Exception ex)
             {
-                throw new ApiException($"Failed to get user saved albums: {ex.Message}", ex);
+                throw new NoSongPlayingException($"Failed to get currently playing song: {ex.Message}", ex);
             }
+        }
+
+        public async Task<LyricsResponse?> GetLyricsAsync(string trackId)
+        {
+            if (string.IsNullOrWhiteSpace(trackId)) throw new ArgumentNullException(nameof(trackId));
+            await EnsureLoggedInAsync();
+
+            Console.WriteLine($"[Info] Fetching Lyrics for Track '{trackId}'...");
+            string lyricsUrl = $"https://spclient.wg.spotify.com/color-lyrics/v2/track/{trackId}?format=json&market=from_token";
+
+            try
+            {
+                using var requestMessage = new HttpRequestMessage(HttpMethod.Get, lyricsUrl);
+                using var response = await _httpClient.SendAsync(requestMessage);
+
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    Console.WriteLine("[Warning] Lyrics not found.");
+                    return null;
+                }
+
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<LyricsResponse>(_jsonOptions);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Error] Error fetching lyrics for {trackId}: {ex}");
+                throw new LyricsNotFoundException($"Failed to get lyrics for track {trackId}: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<byte[]?> DownloadFileAsync(string url)
+        {
+            try { return await _httpClient.GetByteArrayAsync(url); } catch { return null; }
         }
 
         public void Dispose()
         {
             _httpClient?.Dispose();
             GC.SuppressFinalize(this);
+        }
+    }
+
+    public static class SpotifyIdConverter
+    {
+        private const string Base62Digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+        public static string Base62ToHex(string base62Id)
+        {
+            BigInteger id = 0;
+            foreach (char c in base62Id)
+            {
+                int p = Base62Digits.IndexOf(c);
+                if (p < 0) throw new ArgumentException("Invalid Base62 character", nameof(base62Id));
+                id = id * 62 + p;
+            }
+
+            string hex = id.ToString("x");
+            if (hex.Length > 32 && hex.StartsWith("0"))
+            {
+                hex = hex.Substring(1);
+            }
+            return hex.PadLeft(32, '0');
         }
     }
 }

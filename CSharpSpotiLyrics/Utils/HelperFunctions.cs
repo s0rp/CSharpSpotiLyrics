@@ -26,11 +26,11 @@ namespace CSharpSpotiLyrics.Core.Utils
 
     public static class HelperFunctions
     {
-        private static readonly Regex InvalidFileCharsRegex =
-            new(
-                $"[{Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()))}]",
-                RegexOptions.Compiled
-            );
+
+        private static readonly Regex InvalidFileCharsRegex = new(
+            $"[{Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()))}]",
+            RegexOptions.Compiled
+        );
         private static readonly Regex FormatRegex = new(@"\{(.+?)\}", RegexOptions.Compiled);
 
         public static string SanitizeFileName(string fileName)
@@ -90,6 +90,7 @@ namespace CSharpSpotiLyrics.Core.Utils
             return SanitizeFileName(result);
         }
 
+
         // Helper to prepare placeholder data from SpotifyTrack
         public static TrackInfoPlaceholder SanitizeTrackData(SpotifyTrack track)
         {
@@ -108,7 +109,7 @@ namespace CSharpSpotiLyrics.Core.Utils
                 TrackNumber = track.TrackNumber.ToString("D2"), // Pad with zero if needed
                 TotalTracks = track.Album?.TotalTracks.ToString("D2"), // Pad with zero if needed
                 ReleaseDate = track.Album?.ReleaseDate,
-                Explicit = track.Explicit ? "[E]" : ""
+                Explicit = track.Explicit ? "[E]" : "",
             };
         }
 

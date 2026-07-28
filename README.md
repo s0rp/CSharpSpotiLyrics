@@ -1,154 +1,163 @@
 # CSharpSpotiLyrics
 
-A command-line tool built with C# to download lyrics from Spotify and save them as `.lrc` files. This tool can fetch lyrics for individual tracks, albums, playlists, your currently playing song, items from your library, or even attempt to find lyrics for local audio files based on their metadata. (Included with dll.)
+A professional C# command-line interface (CLI) application designed to retrieve and download synchronized lyrics (`.lrc` files) from Spotify. 
+
+The utility supports downloading lyrics for individual tracks, complete albums, public playlists, currently playing media, or interactive selections directly from your saved library. It can also recursively scan local directories to match local audio metadata with synced lyrics.
 
 ---
-## Alternative Languages (For README)
-[Türkçe](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/README_TR.md)
+### Alternative Languages (For README)
+* [Türkçe (Turkish)](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/README_TR.md)
 ---
 
----
-⚠️ **Disclaimer** ⚠️
-
-**This project might violate Spotify's Terms of Service. Use it responsibly and at your own risk. The developers assume no liability for any consequences resulting from its use.**
+> ⚠️ **Disclaimer**  
+> **This project is intended for educational purposes. Accessing Spotify's internal APIs might violate their Terms of Service. Use this tool responsibly and at your own risk. The developers assume no liability for account restrictions or consequences resulting from its use.**
 
 ---
 
 ## Features
 
-*   Download lyrics for Spotify tracks, albums, or playlists using their URL or ID.
-*   Fetch lyrics for local audio files in a specified directory by reading metadata and searching Spotify.
-*   Download lyrics for the song currently playing on your Spotify account.
-*   Interactively select and download lyrics for albums or playlists saved in your Spotify library.
-*   Save lyrics in the standard `.lrc` format (synced lyrics).
-*   Configuration file (`config.json`) for persistent settings (download path, `sp_dc` token).
-*   Command-line options to override configuration settings (download path, force overwrite).
-*   Interactive configuration management (edit, reset, open config file location).
-*   Authenticates using your Spotify `sp_dc` cookie.
-*   Reports tracks for which lyrics could not be found or downloaded.
+*   **Multi-Target Retrieval:** Download synced lyrics using Spotify Track, Album, or Playlist URLs and unique IDs.
+*   **Local Directory Matching:** Scan local audio files, read metadata tags, query Spotify automatically, and drop `.lrc` files directly alongside your local media.
+*   **Active Session Sync:** Fetch lyrics for the song currently playing on your active Spotify session.
+*   **Interactive Library Mode:** Interactively select and download from your saved library playlists and saved albums.
+*   **LRC Formatting:** Outputs standardized, synced `.lrc` files compatible with most modern media players.
+*   **Zero-Config Browser Setup:** Built-in Playwright backend automatically bootstraps the required Chromium environment on runtime—no manual browser installation is required.
+*   **Flexible Configuration:** Dedicated `config.json` file to persist your default download directory and `sp_dc` cookie. All options can be overridden dynamically on execution via command-line flags.
+*   **Cache Management & Troubleshooting:** Easily flush state caches (TOTP keys and dynamic GraphQL hashes) with a simple CLI argument if you encounter sync issues.
+
+---
 
 ## Prerequisites
 
-*   **.NET SDK:** You need the .NET SDK installed (e.g., .NET 6.0 or later recommended) to build and run the project. Download from [here](https://dotnet.microsoft.com/download).
-*   **Spotify `sp_dc` Cookie:** The application requires a valid `sp_dc` cookie from your Spotify web session for authentication.
+*   **.NET SDK:** .NET 6.0 SDK or later is required to build and run the source code. [Download .NET SDK](https://dotnet.microsoft.com/download).
+*   **Spotify `sp_dc` Cookie:** A valid web player session cookie is required to authenticate API requests.
 
-## Installation / Setup
+---
 
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/s0rp/CSharpSpotiLyrics
-    cd CSharpSpotiLyrics
-    ```
-2.  **Build the Project (Optional but Recommended):**
-    ```bash
-    dotnet build -c Release
-    ```
-    This compiles the code. You can run it directly using `dotnet run` or publish it for a standalone executable. (Dont forget to cd Cli dir!)
+## Installation & Setup
+
+1. **Clone the Repository:**
+   ```bash
+   git clone https://github.com/s0rp/CSharpSpotiLyrics
+   cd CSharpSpotiLyrics/Cli
+   ```
+
+2. **Build the Application:**
+   ```bash
+   dotnet build -c Release
+   ```
+
+You can execute the utility directly via the .NET CLI or run the compiled binary under `/bin/Release/` directly.
+
+---
 
 ## Configuration
 
-Before using the application, you **must** configure your Spotify `sp_dc` cookie.
+Before downloading lyrics, you must authenticate the CLI by saving your Spotify `sp_dc` web cookie to the application profile.
 
-**1. How to get your `sp_dc` Cookie:**
+### 1. How to retrieve your `sp_dc` cookie:
+1. Open your web browser and log in to [open.spotify.com](https://open.spotify.com).
+2. Open your browser's Developer Tools (typically `F12` or `Right Click -> Inspect`).
+3. Navigate to the **Application** tab (Chrome/Edge) or **Storage** tab (Firefox).
+4. Expand the **Cookies** dropdown on the left and select `https://open.spotify.com`.
+5. Find the row named `sp_dc` and copy its alphanumeric **Value**.
 
-*   Open your web browser and log in to [open.spotify.com](https://open.spotify.com).
-*   Open your browser's Developer Tools (usually by pressing `F12`).
-*   Go to the "Application" (Chrome/Edge) or "Storage" (Firefox) tab.
-*   Find "Cookies" in the sidebar and select `https://open.spotify.com`.
-*   Locate the cookie named `sp_dc`.
-*   Copy its **value**. This is your token.
+> **Security Warning:** Your `sp_dc` token functions as your active session password. Keep it secure and never share it publicly.
 
-    **Security Note:** Keep your `sp_dc` token secure. Do not share it, as it grants access to your Spotify account.
+### 2. Setting up the application config:
+Run the built-in interactive configuration tool:
+```bash
+dotnet run -- --config edit
+```
+The interface will guide you to:
+* Paste your copied `sp_dc` token.
+* Specify your default target directory where lyric files should be saved.
+* Set other structural preferences (e.g., `ForceDownload` behaviors).
 
-**2. Setting the `sp_dc` Cookie in the App:**
+*Note: The configuration directory varies based on your Operating System. The CLI will display the exact path of your `config.json` upon initialization.*
 
-*   Run the application with the `edit` config action for the first time:
-    ```bash
-    # From the project directory
-    dotnet run -- --config edit
-    ```
-    Or, if you have published an executable (e.g., `CSharpSpotiLyrics.exe` or `CSharpSpotiLyrics`):
-    ```bash
-    ./CSharpSpotiLyrics --config edit
-    ```
-*   The application will guide you through creating/editing the configuration file (`config.json`).
-*   Paste your copied `sp_dc` token when prompted.
-*   Set your desired default download path.
-*   Configure other options like `ForceDownload` if needed.
-
-The configuration file is typically stored in a platform-specific application data folder. The application will show the path when you first run it or when editing.
-
-**Other Config Actions:**
-
-*   `--config reset`: Resets the configuration to default values (you will need to enter the `sp_dc` token again).
-*   `--config open`: Attempts to open the directory containing the `config.json` file in your file explorer.
+---
 
 ## Usage
-
-Run the application from your terminal within the project directory using `dotnet run --` followed by arguments and options, or run the published executable directly.
-
-**Basic Syntax:**
 
 ```bash
 # Using dotnet run
 dotnet run -- [options] [<url_or_path>]
 
-# Using published executable (example)
+# Direct executable use (e.g., published binary)
 ./CSharpSpotiLyrics [options] [<url_or_path>]
 ```
 
-**Arguments:**
+### Arguments
+*   `<url_or_path>`: *(Optional)* Accepts a Spotify track/album/playlist URL or ID, or a local file directory path.
 
-*   `url_or_path` (Optional): The Spotify URL/ID (track, album, playlist) or the path to a local directory containing audio files.
+### Options
 
-**Options:**
+| Command / Option | Description |
+| :--- | :--- |
+| `-d`, `--directory <path>` | Temporarily overrides the download output folder for this execution. |
+| `-f`, `--force` | Forces download, overwriting existing `.lrc` files in the output directory. |
+| `-cl`, `--clearcache` | Deletes cache configurations (`.SPOTIFYTOTP` and `.SPOTIFYHASH`) to resolve sync errors. |
+| `-u`, `--user <item>` | Interacts with your active library. Values: `current`, `album`, `play`. |
+| `-c`, `--config <action>` | Launches configuration helper. Values: `edit`, `reset`, `open`. |
 
-*   `-d`, `--directory <path>`: Specify a download directory for this run, overriding the config.
-*   `-f`, `--force`: Force download, even if `.lrc` files already exist. Overrides config setting.
-*   `-c`, `--config <action>`: Manage configuration (`edit`, `reset`, `open`).
-*   `-u`, `--user <item>`: Interact with the logged-in user's library (`current`, `album`, `play`).
+---
 
-**Examples:**
+## Command Examples
 
-*   **Download lyrics for a specific track URL:**
-    ```bash
-    dotnet run -- "https://open.spotify.com/track/your_track_id"
-    ```
-*   **Download lyrics for an album ID:**
-    ```bash
-    dotnet run -- spotify:album:your_album_id
-    ```
-*   **Download lyrics for a playlist URL:**
-    ```bash
-    dotnet run -- "https://open.spotify.com/playlist/your_playlist_id"
-    ```
-*   **Fetch lyrics for local files in a directory:**
-    ```bash
-    dotnet run -- "/path/to/your/music/folder"
-    ```
-*   **Download lyrics for the currently playing song:**
-    ```bash
-    dotnet run -- --user current
-    ```
-*   **Download lyrics for an album from your library (interactive selection):**
-    ```bash
-    dotnet run -- --user album
-    ```
-*   **Download lyrics for a playlist from your library (interactive selection):**
-    ```bash
-    dotnet run -- --user play
-    ```
-*   **Download track lyrics, overriding download path:**
-    ```bash
-    dotnet run -- --directory "/custom/lyrics/path" "spotify:track:your_track_id"
-    ```
-*   **Force download lyrics for an album:**
-    ```bash
-    dotnet run -- --force "spotify:album:your_album_id"
-    ```
+### Download via Spotify Link or ID
+```bash
+# Track URL
+dotnet run -- "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+
+# Album ID (URI Format)
+dotnet run -- "spotify:album:29D78864XbAUp6v"
+
+# Playlist Link (downloads all tracks inside)
+dotnet run -- "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGg6cmY8"
+```
+
+### Local Library Matching
+```bash
+# Scan metadata in a local music folder and automatically download matching lyrics
+dotnet run -- "/home/user/Music/MyAlbum"
+```
+
+### Active Session & Saved Library Interactions
+```bash
+# Download lyrics for whatever is playing on your account right now
+dotnet run -- --user current
+
+# Interactively browse and select saved playlists from your profile
+dotnet run -- --user play
+
+# Interactively browse and download saved albums from your profile
+dotnet run -- --user album
+```
+
+### Configuration and Diagnostics
+```bash
+# Force overwrite existing lyrics files
+dotnet run -- --force "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+
+# Clear temporary API hashes and TOTP keys to resolve bad request errors
+dotnet run -- --clearcache "https://open.spotify.com/track/4PTG3Z6ehGkBFmYskgR96g"
+
+# Open the directory containing config.json in your File Explorer
+dotnet run -- --config open
+```
+
+---
+
+## Troubleshooting
+
+If you encounter authentication or connection errors (e.g., `400 Bad Request` during client startup):
+1. Ensure your `sp_dc` cookie hasn't expired. You can verify this by checking if you are still logged into the Spotify Web Player in your browser.
+2. Run the application with the `-cl` / `--clearcache` option. This deletes local tokens and forces Playwright to renegotiate your connection structure and update your Pathfinder API hashes automatically.
+
+---
 
 ## Credits
 
-*   **Development & C# Implementation:** S0rp
-*   **Code Rewriting & Arrangement:** Dixiz 3A
-*   **Original Concept / Python Implementation Inspiration:** [syrics by akashrchandran](https://github.com/akashrchandran/syrics)
+*   **Development & C# Core Architecture:** s0rp
+*   **Workflow Rewriting & Code Arrangement:** Dixiz 3A (MoE Project Neural Supervisor)

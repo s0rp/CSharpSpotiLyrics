@@ -2,15 +2,16 @@
 Author : s*rp
 Purpose Of File : Main entry point for the CSharpSpotiLyrics console application.
 Date : 24.04.2025
+Update: 23.01.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
 using System.CommandLine;
 using System.CommandLine.Invocation;
-using System.Reflection.Metadata;
 using CSharpSpotiLyrics.Console.App;
 using CSharpSpotiLyrics.Core.Api;
 using CSharpSpotiLyrics.Core.Exceptions;
-using CSharpSpotiLyrics.Core.Models; // For selection models
+using CSharpSpotiLyrics.Core.Models;
+using CSharpSpotiLyrics.Core.Utils; // For selection models
 
 public class Program
 {
@@ -43,13 +44,19 @@ public class Program
             getDefaultValue: () => false // Default to not forcing via CLI flag
         );
 
+        var clearcacheOption = new Option<bool>(
+            aliases: new[] { "-cl", "--clearcache" },
+            description: "Clear the cache before running. If something doesn’t work as expected, try using this option to reset cached data.",
+            getDefaultValue: () => false // Default to not forcing via CLI flag
+        );
+
         var configOption = new Option<string?>(
             aliases: new[] { "-c", "--config" },
             description: "Manage the configuration file.",
             getDefaultValue: () => null
         )
         {
-            ArgumentHelpName = "action (edit|reset|open)"
+            ArgumentHelpName = "action (edit|reset|open)",
         };
         configOption.AddCompletions("edit", "reset", "open"); // Suggest possible values
 
@@ -59,13 +66,14 @@ public class Program
             getDefaultValue: () => null
         )
         {
-            ArgumentHelpName = "item (current|album|play)"
+            ArgumentHelpName = "item (current|album|play)",
         };
         userOption.AddCompletions("current", "album", "play"); // Suggest possible values
 
         rootCommand.AddArgument(urlArgument);
         rootCommand.AddOption(directoryOption);
         rootCommand.AddOption(forceOption);
+        rootCommand.AddOption(clearcacheOption);
         rootCommand.AddOption(configOption);
         rootCommand.AddOption(userOption);
 
@@ -76,6 +84,7 @@ public class Program
                 var url = context.ParseResult.GetValueForArgument(urlArgument);
                 var directory = context.ParseResult.GetValueForOption(directoryOption);
                 var force = context.ParseResult.GetValueForOption(forceOption);
+                var clear = context.ParseResult.GetValueForOption(clearcacheOption);
                 var configAction = context.ParseResult.GetValueForOption(configOption);
                 var userItem = context.ParseResult.GetValueForOption(userOption);
                 if (
@@ -87,7 +96,7 @@ public class Program
                     await rootCommand.InvokeAsync("--help"); //show help to newbies ;)
                     return;
                 }
-                await RunApplicationLogic(url, directory, force, configAction, userItem);
+                await RunApplicationLogic(url, directory, force, configAction, userItem, clear);
             }
         );
 
@@ -101,7 +110,8 @@ public class Program
         string? directoryOverride,
         bool forceOverride,
         string? configAction,
-        string? userItem
+        string? userItem,
+        bool? ForceCacheClear
     )
     {
         // Handle config actions first, as they might exit
@@ -276,7 +286,7 @@ public class Program
         }
     }
 
-    private static async Task<bool> InitializeAsync(string? directoryOverride, bool forceOverride)
+    private static async Task<bool> InitializeAsync(string? directoryOverride, bool forceOverride, bool ForceCacheClear = false)
     {
         try
         {
@@ -292,7 +302,7 @@ public class Program
                 );
                 return false; // Require user to edit first time.
             }
-
+            
             _config = ConfigurationManager.LoadConfig();
 
             // Apply command-line overrides
@@ -328,6 +338,8 @@ public class Program
 
             // Initialize Spotify Client and attempt login
             _client = new SpotifyClient(_config.SpDc);
+            if(ForceCacheClear)
+                _client.RemoveCaches();
             await _client.LoginAsync(); // Attempt login early to check token
 
             // Initialize handlers
@@ -347,6 +359,9 @@ public class Program
             Console.Error.WriteLine(
                 "Please check your sp_dc token validity and network connection."
             );
+            Console.Error.WriteLine(
+    "Try again with Clearcache; for more information, check the help or the repo (github.com/s0rp/CSharpSpotiLyrics)."
+);
             return false;
         }
         catch (Exception ex)
@@ -398,11 +413,11 @@ public class Program
 
                 case "album":
                     var selectedAlbum = await SelectUserAlbumAsync();
-                    return selectedAlbum?.ExternalUrls?["spotify"]; // Return URL if selected
+                    return selectedAlbum?.Uri; // Return URL if selected
 
                 case "play":
                     var selectedPlaylist = await SelectUserPlaylistAsync();
-                    return selectedPlaylist?.ExternalUrls?["spotify"]; // Return URL if selected
+                    return selectedPlaylist?.Uri; // Return URL if selected
 
                 default:
                     Console.Error.WriteLine(
@@ -528,7 +543,7 @@ public class Program
                         {
                             Id = selectedFullAlbum.Id,
                             Name = selectedFullAlbum.Name,
-                            ExternalUrls = selectedFullAlbum.ExternalUrls,
+                            Uri = selectedFullAlbum.Uri,
                             Artists = selectedFullAlbum.Artists, // Assuming SimpleArtistObject matches
                             Images = selectedFullAlbum.Images,
                             // ... copy other relevant fields ...

@@ -2,6 +2,7 @@
 Author : s*rp
 Purpose Of File : Model for Spotify User object.
 Date : 24.04.2025
+Update: 23.01.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
 using System.Text.Json.Serialization;
@@ -23,7 +24,7 @@ namespace CSharpSpotiLyrics.Core.Models
         public string? Id { get; set; }
 
         [JsonPropertyName("images")]
-        public List<ImageObject>? Images { get; set; }
+        public List<ImageObjectt>? Images { get; set; }
 
         [JsonPropertyName("type")]
         public string? Type { get; set; }
@@ -49,7 +50,7 @@ namespace CSharpSpotiLyrics.Core.Models
 
     // --- Helper classes used by SpotifyUser and potentially others ---
 
-    public class ImageObject
+    public class ImageObjectt
     {
         [JsonPropertyName("url")]
         public string? Url { get; set; }
