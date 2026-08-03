@@ -1,4 +1,4 @@
-$$\large\color{green}\textbf{**Status Update (28/07/2026):** V2 Release is WORKING!}$$
+$$\large\color{red}\textbf{**Status Update (04/08/2026):** V2 Release is NOT WORKING! WIP!}$$
 
 ### See it in live: https://sxrp.me
 
