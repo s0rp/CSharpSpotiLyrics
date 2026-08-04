@@ -1,12 +1,17 @@
 $$\large\color{green}\textbf{**Status Update (04/08/2026):** Version 2.0.1 Release is WORKING!}$$
 
-### See it in live: https://sxrp.me
+[![C#](https://img.shields.io/badge/Language-C%23-512BD4?style=for-the-badge&logo=csharp&logoColor=white)](https://dotnet.microsoft.com/)
+[![Framework](https://img.shields.io/badge/Framework-.NET%206.0%2B-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
+[![Release](https://img.shields.io/badge/Release-v2.0.1-brightgreen?style=for-the-badge&logo=github)](https://github.com/s0rp/CSharpSpotiLyrics/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
 # CSharpSpotiLyrics
+> **The ultimate command-line Spotify synced lyrics downloader (`.lrc`) built in C# and .NET.**
 
-A professional C# command-line interface (CLI) application designed to retrieve and download synchronized lyrics (`.lrc` files) from Spotify. 
+**CSharpSpotiLyrics** is a professional C# command-line interface (CLI) application designed to retrieve, extract, and download synchronized time-coded lyrics (`.lrc` files) from Spotify.
 
-The utility supports downloading lyrics for individual tracks, complete albums, public playlists, currently playing media, or interactive selections directly from your saved library. It can also recursively scan local directories to match local audio metadata with synced lyrics.
+Whether you need to batch-download lyrics for individual tracks, complete albums, public playlists, currently playing session tracks, or interactively select songs from your saved library, **CSharpSpotiLyrics** handles it seamlessly. It also features automatic local audio directory scanning to match ID3 metadata tags directly with Spotify's synced lyrics catalog.
 
 ---
 ### Alternative Languages (For README)
@@ -14,20 +19,20 @@ The utility supports downloading lyrics for individual tracks, complete albums, 
 ---
 
 > ⚠️ **Disclaimer**  
-> **This project is intended for educational purposes. Accessing Spotify's internal APIs might violate their Terms of Service. Use this tool responsibly and at your own risk. The developers assume no liability for account restrictions or consequences resulting from its use.**
+> **This project is intended for educational purposes only. Accessing Spotify's internal APIs might violate their Terms of Service. Use this tool responsibly and at your own risk. The developers assume no liability for account restrictions or consequences resulting from its use.**
 
 ---
 
-## Features
+## Key Features
 
-*   **Multi-Target Retrieval:** Download synced lyrics using Spotify Track, Album, or Playlist URLs and unique IDs.
-*   **Local Directory Matching:** Scan local audio files, read metadata tags, query Spotify automatically, and drop `.lrc` files directly alongside your local media.
-*   **Active Session Sync:** Fetch lyrics for the song currently playing on your active Spotify session.
-*   **Interactive Library Mode:** Interactively select and download from your saved library playlists and saved albums.
-*   **LRC Formatting:** Outputs standardized, synced `.lrc` files compatible with most modern media players.
-*   **Zero-Config Browser Setup:** Built-in Playwright backend automatically bootstraps the required Chromium environment on runtime—no manual browser installation is required.
-*   **Flexible Configuration:** Dedicated `config.json` file to persist your default download directory and `sp_dc` cookie. All options can be overridden dynamically on execution via command-line flags.
-*   **Cache Management & Troubleshooting:** Easily flush state caches (TOTP keys and dynamic GraphQL hashes) with a simple CLI argument if you encounter sync issues.
+*   **Multi-Target Lyrics Retrieval:** Download synced `.lrc` lyrics using Spotify Track, Album, or Playlist URLs and unique IDs.
+*   **Local Audio Metadata Matching:** Scan local music folders, read audio file ID3 metadata tags, query Spotify automatically, and save synced `.lrc` files alongside your local media.
+*   **Active Session Synchronization:** Instantly fetch and save lyrics for the song currently playing on your active Spotify session.
+*   **Interactive Library Mode:** Interactively select and download lyrics from your saved library playlists and saved albums.
+*   **Standardized LRC Formatting:** Outputs clean, time-synced `.lrc` files compatible with modern media players (e.g., VLC, Poweramp, Musicolet, Foobar2000).
+*   **Zero-Config Browser Automation:** Built-in Playwright backend automatically bootstraps the required Chromium environment at runtime—no manual browser setup required.
+*   **Flexible Configuration Management:** Dedicated `config.json` file to persist your default download directory and `sp_dc` cookie. All options can be overridden dynamically via command-line flags.
+*   **Cache Management & Troubleshooting:** Easily flush state caches (TOTP keys and dynamic GraphQL hashes) with a simple CLI argument to resolve connection or API sync errors.
 
 ---
 
