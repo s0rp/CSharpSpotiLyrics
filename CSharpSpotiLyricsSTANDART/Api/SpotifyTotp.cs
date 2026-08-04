@@ -5,7 +5,7 @@ Date : 24.04.2025
 Update: 04.08.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 - MAJOR UPDT FROM 04.08.2026:
-    - Removed playwright usage. (Ill remove the package in next major version. its major updt for that file, not the entire version. its better to not touch :D)
+    - Removed playwright usage. (Package removed tho)
     - Added fetching totp & hashes from http client and regex. Fully.
     - Fixed totp version and secrets mismatching from spotify (bcs of regex mostly)
  */
