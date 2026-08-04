@@ -1,4 +1,4 @@
-$$\large\color{yellow}\textbf{**Status Update (04/08/2026):** V2 Release is NOT WORKING! WIP (Fixed on LRPC. Aplying on this repo tho!)}$$
+$$\large\color{green}\textbf{**Status Update (04/08/2026):** Version 2.0.1 Release is WORKING!}$$
 
 ### See it in live: https://sxrp.me
 
