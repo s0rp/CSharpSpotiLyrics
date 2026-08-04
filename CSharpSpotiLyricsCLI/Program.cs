@@ -587,6 +587,7 @@ public class Program
                        
             """;
         Console.WriteLine(logo);
+        Console.WriteLine("Version : 2.0.1");
     }
 
     private static async Task PrintUserInfoAsync()
