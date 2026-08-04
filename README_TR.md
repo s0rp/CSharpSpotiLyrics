@@ -1,4 +1,4 @@
-$$\large\color{green}\textbf{**Durum Güncellemesi (28/07/2026):** V2 Sürümü ÇALIŞIYOR!}$$
+$$\large\color{green}\textbf{**Durum Güncellemesi (04/08/2026):** 2.0.1 Sürümü ÇALIŞIYOR!}$$
 
 ### Canlı olarak deneyimleyin: https://sxrp.me
 
