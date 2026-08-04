@@ -1,12 +1,16 @@
 ﻿/*
 Author : s*rp
-Purpose Of File : Generates the specific TOTP needed for Spotify internal authentication.
+Purpose Of File : Fetching Hash Table & Totp secrets.
 Date : 24.04.2025
-Update: 23.01.2026
+Update: 04.08.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
-*/
+- MAJOR UPDT FROM 04.08.2026:
+    - Removed playwright usage. (Ill remove the package in next major version. its major updt for that file, not the entire version. its better to not touch :D)
+    - Added fetching totp & hashes from http client and regex. Fully.
+    - Fixed totp version and secrets mismatching from spotify (bcs of regex mostly)
+ */
+
 using System;
-using System.Buffers.Text;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,8 +20,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Xml;
-using Microsoft.Playwright;
 
 namespace CSharpSpotiLyrics.Core.Api
 {
@@ -25,14 +27,9 @@ namespace CSharpSpotiLyrics.Core.Api
     {
         private const int Period = 30;
         private const int Digits = 6;
-        private static readonly string TotpFilePath = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            ".SPOTIFYTOTP"
-        );
-        private static readonly string HashPath = Path.Combine(
-            Directory.GetCurrentDirectory(),
-            ".SPOTIFYHASH"
-        );
+        private static readonly string TotpFilePath = Path.Combine(Directory.GetCurrentDirectory(), ".SPOTIFYTOTP");
+        private static readonly string HashPath = Path.Combine(Directory.GetCurrentDirectory(), ".SPOTIFYHASH");
+        private static readonly HttpClient _httpClient = new HttpClient();
 
         public class TotpReturn
         {
@@ -49,7 +46,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public static TotpReturn GenerateTotp(long serverTimeMilliseconds, bool force = false)
         {
-            var (secret, version, cached) = GetSecretAndVersion(force);
+            var (secret, version, cached) = GetSecretAndVersion(force).GetAwaiter().GetResult();
 
             long counter = serverTimeMilliseconds / 1000 / Period;
             byte[] counterBytes = BitConverter.GetBytes(counter);
@@ -92,191 +89,21 @@ namespace CSharpSpotiLyrics.Core.Api
             return Encoding.UTF8.GetString(base64Bytes);
         }
 
-        private static (byte[] secret, int version, bool cached) GetSecretAndVersion(bool forceNew = false)
+        private static async Task<(byte[] secret, int version, bool cached)> GetSecretAndVersion(bool forceNew = false)
         {
             SecretVersionJSON cache = null;
             try
             {
-                if (File.Exists(TotpFilePath) && forceNew == false)
-                    cache = JsonSerializer.Deserialize<SecretVersionJSON>(
-                        File.ReadAllText(TotpFilePath)
-                    );
+                if (File.Exists(TotpFilePath) && !forceNew)
+                    cache = JsonSerializer.Deserialize<SecretVersionJSON>(File.ReadAllText(TotpFilePath));
             }
-            catch
-            {
-                cache = null;
-            }
+            catch { cache = null; }
 
-        FETCH_SECRET:
-            var extractedData = new SecretVersionJSON { Secret = string.Empty, Version = -1 };
+            SecretVersionJSON extractedData = null;
 
             if (cache == null)
             {
-                extractedData = Task.Run(async () =>
-                {
-                    var exitCode = Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
-                    if (exitCode != 0)
-                        throw new Exception($"Failed to install Playwright Chromium. Exit code: {exitCode}");
-
-                    using var playwright = await Playwright.CreateAsync();
-
-                    IBrowser browser = await playwright.Chromium.LaunchAsync(
-                        new BrowserTypeLaunchOptions
-                        {
-                            Args = new[]
-                            {
-                                "--no-sandbox",
-                                "--disable-setuid-sandbox",
-                                "--disable-dev-shm-usage",
-                                "--disable-gpu",
-                            },
-                        }
-                    );
-
-                    string hook = @"(()=>{if(globalThis.__secretHookInstalled)return;globalThis.__secretHookInstalled=true;globalThis.__captures=[];
-Object.defineProperty(Object.prototype,'secret',{configurable:true,set:function(v){try{__captures.push({secret:v,version:this.version,obj:this});}catch(e){}
-Object.defineProperty(this,'secret',{value:v,writable:true,configurable:true,enumerable:true});}});})();";
-
-                    var context = await browser.NewContextAsync();
-                    await context.AddInitScriptAsync(hook);
-
-                    var page = await context.NewPageAsync();
-                    var jsFileContents = new List<string>();
-
-                    try
-                    {
-                        page.Response += async (_, response) =>
-                        {
-                            var url = response.Url;
-
-                            if (url.Contains("web-player") && url.EndsWith(".js") && response.Status == 200)
-                            {
-                                try
-                                {
-                                    var content = await response.TextAsync();
-                                    jsFileContents.Add(content);
-                                }
-                                catch { }
-                            }
-                        };
-                    }
-                    catch { }
-
-                    await page.GotoAsync("https://open.spotify.com");
-
-                    try
-                    {
-                        await page.WaitForLoadStateAsync(
-                            LoadState.NetworkIdle,
-                            new PageWaitForLoadStateOptions { Timeout = 45000 }
-                        );
-                    }
-                    catch { }
-
-                    await page.WaitForTimeoutAsync(3000);
-
-                    try
-                    {
-                        string pattern = @"[""']([^""']+)[""']\s*,\s*[""'](query|mutation)[""']\s*,\s*[""']([a-f0-9]{64})[""']";
-                        var regex = new Regex(pattern, RegexOptions.IgnoreCase);
-                        var queryHashes = new Dictionary<string, string>();
-
-                        foreach (var jsContent in jsFileContents)
-                        {
-                            var matches = regex.Matches(jsContent);
-                            foreach (Match match in matches)
-                            {
-                                string opName = match.Groups[1].Value;
-                                string hash = match.Groups[3].Value;
-
-                                if (!queryHashes.ContainsKey(opName))
-                                {
-                                    queryHashes[opName] = hash;
-                                }
-                            }
-                        }
-
-                        Console.WriteLine($"Total Hashes {queryHashes.Count} Found From open.spotify.com");
-
-                        if (queryHashes.Count > 0)
-                        {
-                            File.WriteAllText(HashPath, JsonSerializer.Serialize(queryHashes));
-                            Console.WriteLine($"[LOG] Hashes Saved To '{HashPath}'");
-                        }
-                    }
-                    catch { }
-
-                    var capturesHandle = await page.EvaluateHandleAsync("globalThis.__captures");
-                    var jsonElement = await capturesHandle.JsonValueAsync<JsonElement>();
-
-                    string bestSecret = null;
-                    int bestVersion = -1;
-
-                    if (jsonElement.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in jsonElement.EnumerateArray())
-                        {
-                            string currentSec = null;
-                            int currentVer = 1;
-
-                            if (item.TryGetProperty("secret", out var secretProp))
-                            {
-                                if (secretProp.ValueKind == JsonValueKind.String)
-                                {
-                                    currentSec = secretProp.GetString();
-                                }
-                                else if (secretProp.ValueKind == JsonValueKind.Object)
-                                {
-                                    if (secretProp.TryGetProperty("bytes", out var bytesProp) && bytesProp.ValueKind == JsonValueKind.String)
-                                    {
-                                        try
-                                        {
-                                            byte[] decodedBytes = Convert.FromBase64String(bytesProp.GetString());
-                                            currentSec = Encoding.UTF8.GetString(decodedBytes);
-                                        }
-                                        catch { }
-                                    }
-                                }
-                            }
-
-                            if (string.IsNullOrEmpty(currentSec))
-                                continue;
-
-                            if (item.TryGetProperty("version", out var versionProp) && versionProp.ValueKind == JsonValueKind.Number)
-                            {
-                                currentVer = versionProp.GetInt32();
-                            }
-                            else if (item.TryGetProperty("obj", out var objProp) && objProp.ValueKind == JsonValueKind.Object)
-                            {
-                                if (objProp.TryGetProperty("version", out var subVerProp) && subVerProp.ValueKind == JsonValueKind.Number)
-                                {
-                                    currentVer = subVerProp.GetInt32();
-                                }
-                            }
-
-                            if (currentVer > bestVersion)
-                            {
-                                bestVersion = currentVer;
-                                bestSecret = currentSec;
-                            }
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(bestSecret))
-                    {
-                        File.WriteAllText(
-                            TotpFilePath,
-                            JsonSerializer.Serialize(new SecretVersionJSON
-                            {
-                                Secret = Base64Encode(bestSecret),
-                                Version = bestVersion,
-                            })
-                        );
-                    }
-
-                    return new SecretVersionJSON { Secret = bestSecret, Version = bestVersion };
-
-                }).GetAwaiter().GetResult();
+                extractedData = await FetchSecretAndHashesAsync();
             }
             else
             {
@@ -290,20 +117,13 @@ Object.defineProperty(this,'secret',{value:v,writable:true,configurable:true,enu
                 }
                 catch
                 {
-                    cache = null;
-                    goto FETCH_SECRET;
-                }
-
-                if (extractedData == null || string.IsNullOrEmpty(extractedData.Secret))
-                {
-                    cache = null;
-                    goto FETCH_SECRET;
+                    extractedData = await FetchSecretAndHashesAsync();
                 }
             }
 
-            if (string.IsNullOrEmpty(extractedData.Secret))
+            if (extractedData == null || string.IsNullOrEmpty(extractedData.Secret))
             {
-                throw new InvalidOperationException("Failed to extract TOTP secret via Playwright.");
+                throw new InvalidOperationException("Failed to extract TOTP secret from Spotify Web Player.");
             }
 
             string secretString = extractedData.Secret;
@@ -325,6 +145,92 @@ Object.defineProperty(this,'secret',{value:v,writable:true,configurable:true,enu
             }
 
             return (Encoding.UTF8.GetBytes(secretKey), version, (cache != null));
+        }
+
+        private static async Task<SecretVersionJSON> FetchSecretAndHashesAsync()
+        {
+            string bestSecret = null;
+            int bestVersion = -1;
+            var queryHashes = new Dictionary<string, string>();
+
+            try
+            {
+                _httpClient.DefaultRequestHeaders.UserAgent.Clear();
+                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
+
+                string html = await _httpClient.GetStringAsync("https://open.spotify.com");
+
+                var jsUrlRegex = new Regex(@"(https://[^/]+/cdn/build/web-player/[^""'\s>]+\.js|/cdn/build/web-player/[^""'\s>]+\.js)");
+                var jsUrls = jsUrlRegex.Matches(html).Select(m =>
+                {
+                    string val = m.Value;
+                    if (!val.StartsWith("http")) val = "https://open.spotifycdn.com" + val;
+                    return val;
+                }).Distinct().ToList();
+
+                var secretRegex = new Regex(@"secret:\s*([""'])(?<secret>(?:(?!\1)[^\\]|\\.)*)\1\s*,\s*version:\s*(?<version>\d+)");
+                var hashRegex = new Regex(@"[""'](?<op>[a-zA-Z0-9_]+)[""']\s*,\s*[""'](?:query|mutation)[""']\s*,\s*[""'](?<hash>[a-f0-9]{64})[""']");
+
+                var tasks = jsUrls.Select(async url =>
+                {
+                    try
+                    {
+                        string jsContent = await _httpClient.GetStringAsync(url);
+
+                        var secretMatches = secretRegex.Matches(jsContent);
+                        foreach (Match m in secretMatches)
+                        {
+                            try
+                            {
+                                int ver = int.Parse(m.Groups["version"].Value);
+                                string rawSecret = Regex.Unescape(m.Groups["secret"].Value);
+
+                                lock (queryHashes)
+                                {
+                                    if (ver > bestVersion)
+                                    {
+                                        bestVersion = ver;
+                                        bestSecret = rawSecret;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        var hashMatches = hashRegex.Matches(jsContent);
+                        foreach (Match m in hashMatches)
+                        {
+                            lock (queryHashes)
+                            {
+                                queryHashes[m.Groups["op"].Value] = m.Groups["hash"].Value;
+                            }
+                        }
+                    }
+                    catch { }
+                });
+
+                await Task.WhenAll(tasks);
+
+                Console.WriteLine($"Total Hashes {queryHashes.Count} Found From open.spotify.com");
+
+                if (queryHashes.Count > 0)
+                {
+                    File.WriteAllText(HashPath, JsonSerializer.Serialize(queryHashes));
+                    Console.WriteLine($"[LOG] Hashes Saved To '{HashPath}'");
+                }
+
+                if (!string.IsNullOrEmpty(bestSecret))
+                {
+                    File.WriteAllText(TotpFilePath, JsonSerializer.Serialize(new SecretVersionJSON
+                    {
+                        Secret = Base64Encode(bestSecret),
+                        Version = bestVersion,
+                    }));
+                }
+            }
+            catch { }
+
+            return new SecretVersionJSON { Secret = bestSecret, Version = bestVersion };
         }
     }
 }

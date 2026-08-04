@@ -8,7 +8,8 @@ Supervisor : Dixiz 3A Neural (Coder MoE)
     - Replaced all V1 REST calls to New GraphQL
 - MINOR UPDT FROM 28.07.2026:
     - Added Most of Graphql hashes. Also the logic of this codebase finally matched to LRPC_API's Codebase (A project that displays the lyrics of the song I am currently listening to on my website).
-
+- MINOR UPDT FROM 04.08.2026:
+    Now we're fetchin' time from api.
 - NOTE FROM 28.07.2026 : I have been running this code on my own site (https://sxrp.me) 24/7 for nearly 4-5 months on my Spot' Acc. I haven't encountered any significant issues, so feel free to use it!!!
 
    ▄██▄                     ▄ █   █     █         ▄ ▄ ▄
@@ -252,7 +253,9 @@ namespace CSharpSpotiLyrics.Core.Api
             {
                 try
                 {
-                    long serverTimeSeconds = -1;
+                    long localTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                    long serverTimeSeconds = localTimeSeconds;
+
                     try
                     {
                         using var requestSTS = new HttpRequestMessage(HttpMethod.Get, "https://open.spotify.com/api/server-time");
@@ -267,25 +270,29 @@ namespace CSharpSpotiLyrics.Core.Api
                             {
                                 serverTimeSeconds = serverTimeElement.GetInt64();
                             }
-                            else
-                            {
-                                serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                            }
                         }
                     }
                     catch
                     {
-                        serverTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                        serverTimeSeconds = localTimeSeconds;
                     }
 
+                    long localTimeMilliseconds = localTimeSeconds * 1000;
                     long serverTimeMilliseconds = serverTimeSeconds * 1000;
-                    TotpReturn totp = SpotifyTotp.GenerateTotp(serverTimeMilliseconds, force);
-                    _TotpCached = totp.isCached;
 
-                    string tokenUrl = $"https://open.spotify.com/api/token?reason=init&productType=web-player&totp={totp.Totp}&totpServer={totp.Totp}&totpVer={totp.Version}";
+                    TotpReturn totpLocal = SpotifyTotp.GenerateTotp(localTimeMilliseconds, force);
+                    TotpReturn totpServer = SpotifyTotp.GenerateTotp(serverTimeMilliseconds, force);
+                    _TotpCached = totpLocal.isCached;
+
+                    string tokenUrl = $"https://open.spotify.com/api/token?reason=init&productType=web-player&totp={totpLocal.Totp}&totpServer={totpServer.Totp}&totpVer={totpLocal.Version}";
 
                     using var requestMessage = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
                     using var response = await _httpClient.SendAsync(requestMessage);
+
+                    if (response.StatusCode == HttpStatusCode.Found)
+                    {
+                        throw new NotValidSpDcException($"Auth Failed (302 Redirect). sp_dc expired, missing user-agents or time desync!");
+                    }
 
                     if (!response.IsSuccessStatusCode)
                     {
@@ -338,7 +345,6 @@ namespace CSharpSpotiLyrics.Core.Api
 
                             if (loadedHashes != null && loadedHashes.Count > 0)
                             {
-                                // Merge loaded hashes into the internal dictionary
                                 foreach (var kvp in loadedHashes)
                                 {
                                     OperationToHashTable[kvp.Key] = kvp.Value;
@@ -368,7 +374,6 @@ namespace CSharpSpotiLyrics.Core.Api
                 }
             }
         }
-
         private async Task GetClientTokenAsync(bool alreadyforced = false)
         {
             try
