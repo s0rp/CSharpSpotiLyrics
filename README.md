@@ -6,16 +6,40 @@ $$\large\color{green}\textbf{**Status Update (04/08/2026):** Version 2.0.1 Relea
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
+### See it live: [https://sxrp.me](https://sxrp.me)
+
 # CSharpSpotiLyrics
 > **The ultimate command-line Spotify synced lyrics downloader (`.lrc`) built in C# and .NET.**
 
-**CSharpSpotiLyrics** is a professional C# command-line interface (CLI) application designed to retrieve, extract, and download synchronized time-coded lyrics (`.lrc` files) from Spotify.
+**CSharpSpotiLyrics** is a professional C# command-line interface (CLI) application designed to retrieve, extract, and download synchronized time-coded lyrics (`.lrc` files) directly from Spotify.
 
 Whether you need to batch-download lyrics for individual tracks, complete albums, public playlists, currently playing session tracks, or interactively select songs from your saved library, **CSharpSpotiLyrics** handles it seamlessly. It also features automatic local audio directory scanning to match ID3 metadata tags directly with Spotify's synced lyrics catalog.
 
 ---
+
+## Preview & Screenshots
+
+### Terminal Execution & LRC Output
+![CLI Execution](Images/cmd_WpIiihAIV9.png)
+
+### Downloaded LRC Files & Folder Structure
+![Downloaded Files](Images/explorer_mcq6yd1ogN.png)
+![Album LRC Folder](Images/explorer_6F0ZA3YEjm.png)
+
+### CLI Options & Help Menu
+![CLI Help](Images/cmd_D5Tu43RiyV.png)
+
+---
+
+## Sample Outputs (`Examples/` Directory)
+
+You can inspect pre-downloaded synced `.lrc` file samples and album output structures directly inside the [`Examples/`](./Examples) directory in this repository.
+
+---
+
 ### Alternative Languages (For README)
 * [Türkçe (Turkish)](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/README_TR.md)
+
 ---
 
 > ⚠️ **Disclaimer**  
@@ -23,7 +47,7 @@ Whether you need to batch-download lyrics for individual tracks, complete albums
 
 ---
 
-## Key Features
+## Features
 
 *   **Multi-Target Lyrics Retrieval:** Download synced `.lrc` lyrics using Spotify Track, Album, or Playlist URLs and unique IDs.
 *   **Local Audio Metadata Matching:** Scan local music folders, read audio file ID3 metadata tags, query Spotify automatically, and save synced `.lrc` files alongside your local media.
