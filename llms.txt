@@ -1,0 +1,13 @@
+# CSharpSpotiLyrics
+> A lightweight, dependency-free Spotify Lyrics fetcher written in C# supporting .NET Standard and .NET 8+.
+
+This project bypasses traditional Spotify Web API limits by using partner GraphQL endpoints, supporting Canvas, Lyrics, and Player states.
+
+## Core Documentation
+- [Quick Start](https://github.com/s0rp/CSharpSpotiLyrics#quick-start): How to initialize SpotifyClient and log in.
+- [API Reference](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/API.md): Detailed parameter lists for SpotifyClient methods.
+- [Exceptions](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/EXCEPTIONS.md): List of custom exceptions and how to handle them.
+
+## Advanced Features
+- [Canvas & Video](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/CANVAS.md): Fetching Canvas MP4 URLs.
+- [Token Parsing](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/TOKENS.md): Details on how TOTP is parsed internally without Playwright.

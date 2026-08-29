@@ -8,6 +8,8 @@ $$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 AND 2
 
 ### See it live: [https://sxrp.me](https://sxrp.me)
 
+For AI Assistants (Claude/ChatGPT/Cursor etc): You can ingest this repository instantly using: https://gitingest.com/s0rp/CSharpSpotiLyrics
+
 # CSharpSpotiLyrics
 > **The ultimate command-line Spotify synced lyrics downloader (`.lrc`) built in C# and .NET.**
 
@@ -44,6 +46,7 @@ You can inspect pre-downloaded synced `.lrc` file samples and album output struc
 
 > ⚠️ **Disclaimer**  
 > **This project is intended for educational purposes only. Accessing Spotify's internal APIs might violate their Terms of Service. Use this tool responsibly and at your own risk. The developers assume no liability for account restrictions or consequences resulting from its use.**
+> (Though, It has been in working my account for over a year and running continuously for 5–6 months; there are no issues at the moment.)
 
 ---
 
