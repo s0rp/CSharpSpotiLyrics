@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://cssldocs.sxrp.me/sitemap.xml

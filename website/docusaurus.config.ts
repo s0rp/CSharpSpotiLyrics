@@ -10,7 +10,17 @@ const config: Config = {
   future: {
     v4: true, // Improve compatibility with the upcoming Docusaurus v4
   },
-
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {
+        rel: 'alternate',
+        type: 'text/markdown',
+        title: 'LLM-friendly version',
+        href: '/llms.txt',
+      },
+    },
+  ],
   url: 'https://cssldocs.sxrp.me',
   baseUrl: '/',
 
