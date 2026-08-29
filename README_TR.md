@@ -17,7 +17,7 @@ Bu kütüphanenin canlı ortamda nasıl çalıştığını deneyimlemek için ki
 ### AI Asistanlarında prompt verirken kullanmak İçin (Claude/ChatGPT/Cursor vb): 
 [GitIngest](https://gitingest.com/s0rp/CSharpSpotiLyrics)
 
-## 📚 Dökümantasyon:
+## 📚 Dokümantasyon:
 [İnteraktif Dökümantasyon](https://s0rp.github.io/CSharpSpotiLyrics/)
 [AI & LLM Friendly Docs (llms.txt)](https://s0rp.github.io/CSharpSpotiLyrics/llms.txt)
 
@@ -55,7 +55,7 @@ Bu kütüphanenin canlı ortamda nasıl çalıştığını deneyimlemek için ki
 ---
 
 > ⚠️ **Yasal Uyarı**  
-> **Bu proje eğitim amaçlı geliştirilmiştir. Spotify'ın dahili API'lerine bu şekilde erişmek Hizmet Şartları'nı ihlal edebilir. Sorumluluk tamamen size ait olmak üzere kullanın. Geliştiriciler, kullanımından kaynaklanabilecek herhangi bir hesap kısıtlaması veya diğer sonuçlar için hiçbir sorumluluk kabul etmez.**
+> **Bu proje eğitim amaçlı geliştirilmiştir. Spotify'ın dahili API'lerine bu şekilde erişmek Hizmet Şartları'nı ihlal edebilir. Sorumluluğu tamamen size ait olmak üzere kullanınız. Geliştiriciler, kullanımından kaynaklanabilecek herhangi bir hesap kısıtlaması veya diğer sonuçlar için hiçbir sorumluluk kabul etmez.**
 > (Yine de, kendi hesabımda bir yılı aşkın süredir aktif olarak, son 5-6 aydır ise kesintisiz çalışmaktadır; şu an için herhangi bir sorun yaşanmamıştır.)
 
 ---
@@ -82,16 +82,27 @@ Bu kütüphanenin canlı ortamda nasıl çalıştığını deneyimlemek için ki
 
 ## Kurulum ve Ayarlama
 
-1. **Depoyu Klonlayın:**
-   ```bash
-   git clone https://github.com/s0rp/CSharpSpotiLyrics
-   cd CSharpSpotiLyrics/Cli
-   ```
+### 1. Depoyu klonlayın
+git clone https://github.com/s0rp/CSharpSpotiLyrics
 
-2. **Projeyi Derleyin:**
-   ```bash
-   dotnet build -c Release
-   ```
+cd CSharpSpotiLyrics
+
+### 2. CLI projesinin dizinine gidin
+cd CSharpSpotiLyricsCLI
+
+### 3. Projeyi derleyin
+dotnet build -c Release
+
+### 4. Doğrudan .NET üzerinden çalıştırın
+dotnet run -- [seçenekler] <url_veya_yol>
+
+### Veya derlenen binary dosyasını doğrudan çalıştırın:
+
+### Windows için:
+.\bin\Release\net8.0\CSharpSpotiLyricsCLI.exe [seçenekler] <url_veya_yol>
+
+### Linux/macOS için:
+./bin/Release/net8.0/CSharpSpotiLyricsCLI [seçenekler] <url_veya_yol>
 
 Uygulamayı doğrudan .NET CLI kullanarak çalıştırabilir veya `/bin/Release/` dizini altında derlenen bağımsız binary dosyasını doğrudan terminalinizde yürütebilirsiniz.
 
@@ -207,3 +218,9 @@ Eğer istemci başlatılırken kimlik doğrulama veya bağlantı hataları (örn
 
 *   **Geliştirme & C# Çekirdek Mimarisi:** s0rp
 *   **Workflow Yeniden Yazımı & Kod Düzenlemeleri:** Dixiz 3A (MoE Project Neural Supervisor)
+
+--
+
+## Marka Sorumluluk Reddi (Trademark Disclaimer)
+
+Bu proje tamamen bağımsız, açık kaynaklı bir topluluk çalışmasıdır. **Spotify AB**, Spotify markası, onun iştirakleri, platformda yer alan sanatçılar veya müzik şirketleriyle hiçbir resmi bağı, ortaklığı, sponsorluğu veya alakası bulunmamaktadır. "Spotify" ismi, logosu ve ilgili tüm tescilli markalar Spotify AB firmasına aittir.

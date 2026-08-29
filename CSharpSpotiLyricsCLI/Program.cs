@@ -122,9 +122,9 @@ public class Program
         }
 
         // Perform initial setup: Load config, initialize client
-        if (!await InitializeAsync(directoryOverride, forceOverride))
+        if (!await InitializeAsync(directoryOverride, forceOverride, ForceCacheClear.GetValueOrDefault())) //I forgot to pass :sob:
         {
-            return; // Initialization failed (e.g., bad config, failed login)
+            return;
         }
 
         // Determine the target URL/path based on user input or options

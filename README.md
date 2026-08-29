@@ -69,7 +69,7 @@ You can inspect pre-downloaded synced `.lrc` file samples and album output struc
 *   **Active Session Synchronization:** Instantly fetch and save lyrics for the song currently playing on your active Spotify session.
 *   **Interactive Library Mode:** Interactively select and download lyrics from your saved library playlists and saved albums.
 *   **Standardized LRC Formatting:** Outputs clean, time-synced `.lrc` files compatible with modern media players (e.g., VLC, Poweramp, Musicolet, Foobar2000).
-*   **Zero-Config Browser Automation:** Built-in Playwright backend automatically bootstraps the required Chromium environment at runtime—no manual browser setup required.
+*   **Zero-Browser / Ultra-Lightweight Infrastructure:** No heavy browser automation frameworks (such as Playwright or Selenium) required. Built entirely on top of the native .NET HTTP client and an optimized Regex engine for lightning-fast, cross-platform execution (Windows, Linux, macOS).
 *   **Flexible Configuration Management:** Dedicated `config.json` file to persist your default download directory and `sp_dc` cookie. All options can be overridden dynamically via command-line flags.
 *   **Cache Management & Troubleshooting:** Easily flush state caches (TOTP keys and dynamic GraphQL hashes) with a simple CLI argument to resolve connection or API sync errors.
 
@@ -84,16 +84,28 @@ You can inspect pre-downloaded synced `.lrc` file samples and album output struc
 
 ## Installation & Setup
 
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/s0rp/CSharpSpotiLyrics
-   cd CSharpSpotiLyrics/Cli
-   ```
+### 1. Clone the repository
+git clone https://github.com/s0rp/CSharpSpotiLyrics
 
-2. **Build the Application:**
-   ```bash
-   dotnet build -c Release
-   ```
+cd CSharpSpotiLyrics
+
+### 2. Navigate to the CLI project directory
+cd CSharpSpotiLyricsCLI
+
+### 3. Build the application
+dotnet build -c Release
+
+### 4. Run via .NET CLI
+dotnet run -- [options] <url_or_path>
+
+### Or execute the compiled binary directly:
+
+### For Windows:
+.\bin\Release\net8.0\CSharpSpotiLyricsCLI.exe [options] <url_or_path>
+
+### For Linux/macOS:
+./bin/Release/net8.0/CSharpSpotiLyricsCLI [options] <url_or_path>
+
 
 You can execute the utility directly via the .NET CLI or run the compiled binary under `/bin/Release/` directly.
 
@@ -201,7 +213,7 @@ dotnet run -- --config open
 
 If you encounter authentication or connection errors (e.g., `400 Bad Request` during client startup):
 1. Ensure your `sp_dc` cookie hasn't expired. You can verify this by checking if you are still logged into the Spotify Web Player in your browser.
-2. Run the application with the `-cl` / `--clearcache` option. This deletes local tokens and forces Playwright to renegotiate your connection structure and update your Pathfinder API hashes automatically.
+2. Run the application with the -cl / --clearcache option. This deletes temporary local tokens and cached files, forcing the client to re-authenticate from scratch and automatically retrieve fresh dynamic GraphQL hashes from Spotify.
 
 ---
 
@@ -209,3 +221,9 @@ If you encounter authentication or connection errors (e.g., `400 Bad Request` du
 
 *   **Development & C# Core Architecture:** s0rp
 *   **Workflow Rewriting & Code Arrangement:** Dixiz 3A (MoE Project Neural Supervisor)
+
+--
+
+## Trademark Disclaimer
+
+This is an independent open-source community project. It is not affiliated, associated, authorized, endorsed by, or in any way officially connected with **Spotify AB**, its artists, partners, or any of its subsidiaries or affiliates. The official Spotify website can be found at https://spotify.com. The name "Spotify" as well as related names, marks, emblems, and images are registered trademarks of Spotify AB.
