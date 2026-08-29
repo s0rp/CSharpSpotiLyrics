@@ -2,7 +2,7 @@ $$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 AND 2
 
 [![C#](https://img.shields.io/badge/Language-C%23-512BD4?style=for-the-badge&logo=csharp&logoColor=white)](https://dotnet.microsoft.com/)
 [![Framework](https://img.shields.io/badge/Framework-.NET%206.0%2B-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)
-[![Release](https://img.shields.io/badge/Release-v2.0.1-brightgreen?style=for-the-badge&logo=github)](https://github.com/s0rp/CSharpSpotiLyrics/releases)
+[![Release](https://img.shields.io/badge/Release-v2.0.2-brightgreen?style=for-the-badge&logo=github)](https://github.com/s0rp/CSharpSpotiLyrics/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
