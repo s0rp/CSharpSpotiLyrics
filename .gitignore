@@ -10,6 +10,19 @@
 *.userosscache
 *.sln.docstates
 
+# ==========================================
+# Docusaurus / Node.js (for /website folder)
+# ==========================================
+website/node_modules/
+website/.docusaurus/
+website/build/
+website/.cache/
+website/.env
+website/.env.local
+website/npm-debug.log*
+website/yarn-debug.log*
+website/yarn-error.log*
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

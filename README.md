@@ -6,9 +6,16 @@ $$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 AND 2
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
-### See it live: [https://sxrp.me](https://sxrp.me)
+## See it live: 
+[https://sxrp.me](https://sxrp.me)
 
-For AI Assistants (Claude/ChatGPT/Cursor etc): You can ingest this repository instantly using: https://gitingest.com/s0rp/CSharpSpotiLyrics
+## For AI Assistants (Claude/ChatGPT/Cursor etc): 
+You can ingest this repository instantly using: https://gitingest.com/s0rp/CSharpSpotiLyrics
+
+## 📚 Documentation
+
+- **[Interactive Documentation]**(https://s0rp.github.io/CSharpSpotiLyrics/) - Explore the full API reference, Canvas tutorials, and exception handling guides.
+- **[AI & LLM Friendly Docs (llms.txt)]**(https://s0rp.github.io/CSharpSpotiLyrics/llms.txt) - Clean, plain-text documentation optimized for Claude, ChatGPT, and Cursor agents.
 
 # CSharpSpotiLyrics
 > **The ultimate command-line Spotify synced lyrics downloader (`.lrc`) built in C# and .NET.**
