@@ -6,10 +6,16 @@ $$\large\color{green}\textbf{**Durum Güncellemesi (29/08/2026):** 2.0.1 ve 2.0.
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
-### Canlı Web Sitesi: [https://sxrp.me](https://sxrp.me)
-### İnteraktif Dökümantasyon: [https://cssldocs.sxrp.me](https://cssldocs.sxrp.me)
-### AI & LLM Dostu Dökümanlar (llms.txt): [https://cssldocs.sxrp.me/llms.txt](https://cssldocs.sxrp.me/llms.txt)
-### AI Asistanları İçin (Claude/ChatGPT/Cursor): [GitIngest ile Depoyu Yutun](https://gitingest.com/s0rp/CSharpSpotiLyrics)
+## Canlı Web Sitesi: 
+[https://sxrp.me](https://sxrp.me)
+
+### AI Asistanlarında prompt verirken kullanmak İçin (Claude/ChatGPT/Cursor vb): 
+[GitIngest](https://gitingest.com/s0rp/CSharpSpotiLyrics)
+
+## 📚 Dökümantasyon:
+[İnteraktif Dökümantasyon](https://s0rp.github.io/CSharpSpotiLyrics/)
+[AI & LLM Friendly Docs (llms.txt)](https://s0rp.github.io/CSharpSpotiLyrics/llms.txt)
+
 
 # CSharpSpotiLyrics
 > **Spotify'dan senkronize şarkı sözlerini (`.lrc`) indirmek için C# ile geliştirilmiş profesyonel bir komut satırı aracı (CLI).**
