@@ -23,6 +23,9 @@
 	  <FileVersion>2.0.2</FileVersion>
 	  <Version>2.0.2</Version>
   </PropertyGroup>
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<NoWarn>$(NoWarn);nullable</NoWarn>
+	</PropertyGroup>
   <ItemGroup>
     <None Include="..\LICENSE">
       <Pack>True</Pack>
