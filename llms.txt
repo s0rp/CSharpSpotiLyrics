@@ -1,13 +1,24 @@
 # CSharpSpotiLyrics
-> A lightweight, dependency-free Spotify Lyrics fetcher written in C# supporting .NET Standard and .NET 8+.
+
+> A lightweight, dependency-free Spotify Lyrics fetcher written in C# supporting .NET Standard 2.0 and .NET 8+.
 
 This project bypasses traditional Spotify Web API limits by using partner GraphQL endpoints, supporting Canvas, Lyrics, and Player states.
 
-## Core Documentation
-- [Quick Start](https://github.com/s0rp/CSharpSpotiLyrics#quick-start): How to initialize SpotifyClient and log in.
-- [API Reference](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/API.md): Detailed parameter lists for SpotifyClient methods.
-- [Exceptions](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/EXCEPTIONS.md): List of custom exceptions and how to handle them.
+Key architecture notes for LLM agents:
+- Zero heavy dependencies: This library completely avoids Playwright or headless browsers. It uses HttpClient combined with highly optimized Regex parsing.
+- Performance-first: Uses stream-based JSON parsing and SemaphoreSlim task throttling to avoid RAM spikes and network congestion.
+- Authentication: Bypasses standard OAuth flows by leveraging Spotify's internal Web Player TOTP secrets using raw `sp_dc` cookies.
 
-## Advanced Features
-- [Canvas & Video](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/CANVAS.md): Fetching Canvas MP4 URLs.
-- [Token Parsing](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/TOKENS.md): Details on how TOTP is parsed internally without Playwright.
+## Docs
+
+- [Quick Start](https://github.com/s0rp/CSharpSpotiLyrics#quick-start): Guide on how to initialize SpotifyClient and authenticate.
+- [API Reference](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/API.md): Detailed parameter lists for SpotifyClient methods and GraphQL payloads.
+- [Exceptions](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/EXCEPTIONS.md): Reference list of custom exceptions and handling routines.
+
+## Advanced
+
+- [Canvas & Video](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/CANVAS.md): Instructions on how to fetch Spotify Canvas MP4 URLs.
+
+## Optional
+
+- [Token Parsing](https://github.com/s0rp/CSharpSpotiLyrics/blob/main/docs/TOKENS.md): Technical deep-dive into how Spotify's TOTP is parsed internally without browser automation.
