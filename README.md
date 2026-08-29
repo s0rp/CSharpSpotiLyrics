@@ -14,8 +14,8 @@ You can ingest this repository instantly using: https://gitingest.com/s0rp/CShar
 
 ## 📚 Documentation
 
-- **[Interactive Documentation]**(https://s0rp.github.io/CSharpSpotiLyrics/) - Explore the full API reference, Canvas tutorials, and exception handling guides.
-- **[AI & LLM Friendly Docs (llms.txt)]**(https://s0rp.github.io/CSharpSpotiLyrics/llms.txt) - Clean, plain-text documentation optimized for Claude, ChatGPT, and Cursor agents.
+- [Interactive Documentation](https://s0rp.github.io/CSharpSpotiLyrics/) - Explore the full API reference, Canvas tutorials, and exception handling guides.
+- [AI & LLM Friendly Docs (llms.txt)](https://s0rp.github.io/CSharpSpotiLyrics/llms.txt) - Clean, plain-text documentation optimized for Claude, ChatGPT, and Cursor agents.
 
 # CSharpSpotiLyrics
 > **The ultimate command-line Spotify synced lyrics downloader (`.lrc`) built in C# and .NET.**
