@@ -6,8 +6,13 @@ $$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 AND 2
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
-## See it live: 
-[https://sxrp.me](https://sxrp.me)
+### 🌐 Real-Time Live Demo (proof-of-concept)
+
+To experience how this library works in a live environment, you can visit my personal website:
+👉 **[sxrp.me](https://sxrp.me)**
+
+> **How it works:**
+> This website leverages the **CSharpSpotiLyrics** library under the hood (the LRPC-API project is private, but it runs on the latest version of CSharpSpotiLyrics at its core) to fetch and display the track currently playing on my Spotify account, the player state, and synced lyrics 24/7 in real-time on a dynamic interface (if it is not shown on site or inactive, I am probably sleeping :D)
 
 ## For AI Assistants (Claude/ChatGPT/Cursor etc): 
 You can ingest this repository instantly using: https://gitingest.com/s0rp/CSharpSpotiLyrics

@@ -6,8 +6,13 @@ $$\large\color{green}\textbf{**Durum Güncellemesi (29/08/2026):** 2.0.1 ve 2.0.
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)]()
 
-## Canlı Web Sitesi: 
-[https://sxrp.me](https://sxrp.me)
+### 🌐 Canlı Demo (proof-of-concept)
+
+Bu kütüphanenin canlı ortamda nasıl çalıştığını deneyimlemek için kişisel web sitemi ziyaret edebilirsiniz:
+👉 **[sxrp.me](https://sxrp.me)**
+
+> **Nasıl Çalışıyor?**
+> Bu web sitesi, arka planda **CSharpSpotiLyrics** kütüphanesini kullanarak (LRPC-API projesi private ama altyapısında en son sürüm CSharpSpotiLyrics yatıyor) Spotify hesabımda o anda çalmakta olan şarkıyı, player durumunu ve senkronize şarkı sözlerini 7/24 gerçek zamanlı (real-time) olarak çekip dinamik bir arayüzle sergilemektedir (Durgunsa muhtemelen uyuyorumdur :D)
 
 ### AI Asistanlarında prompt verirken kullanmak İçin (Claude/ChatGPT/Cursor vb): 
 [GitIngest](https://gitingest.com/s0rp/CSharpSpotiLyrics)
