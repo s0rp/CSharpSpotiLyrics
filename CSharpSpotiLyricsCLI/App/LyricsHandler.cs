@@ -148,7 +148,7 @@ namespace CSharpSpotiLyrics.Console.App
                 catch (Exception ex)
                 {
                     System.Console.Error.WriteLine(
-                        $"Error fetching track batch: {ex.Message}. Skipping {idChunk.Count} tracks in this batch."
+                        $"Error fetching track batch: {ex.Message}. Skipping {idChunk.Count()} tracks in this batch."
                     );
                     // Optionally add these IDs to a separate 'failed fetch' list
                 }

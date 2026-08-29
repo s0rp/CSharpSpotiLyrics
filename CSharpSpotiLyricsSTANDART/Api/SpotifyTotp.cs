@@ -2,12 +2,21 @@
 Author : s*rp
 Purpose Of File : Fetching Hash Table & Totp secrets.
 Date : 24.04.2025
-Update: 04.08.2026
+Update: 04.08.2026 & 29.08.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 - MAJOR UPDT FROM 04.08.2026:
-    - Removed playwright usage. (Package removed tho)
-    - Added fetching totp & hashes from http client and regex. Fully.
-    - Fixed totp version and secrets mismatching from spotify (bcs of regex mostly)
+    - Removed playwright usage (Package removed).
+    - Added fetching totp & hashes from http client and regex fully.
+    - Fixed totp version and secrets mismatching from spotify (due to regex mostly).
+- REFACTORED 29.08.2026:
+    - optimizations & sec updts. (371580a83eead4c1061b0ffbbda9cb47a07bb487)
+        - Throttled concurrent HTTP requests in `FetchSecretAndHashesAsync` using `SemaphoreSlim`.
+        - Added a `ConcurrentDictionary`-based reflection property cache in `RenameUsingFormat`.
+        - Added regex timeouts to reduce the risk of ReDoS attacks.
+        - Added conditional compilation to use the built-in `Enumerable.Chunk` on modern target frameworks.
+    - Migrated Console.WriteLine to Microsoft.Extensions.Logging.ILogger.
+    - Added Regex timeouts to mitigate ReDoS vulnerabilities.
+    - Integrated SemaphoreSlim to throttle concurrent JS downloads.
  */
 
 using System;
@@ -21,6 +30,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace CSharpSpotiLyrics.Core.Api
 {
@@ -45,9 +55,9 @@ namespace CSharpSpotiLyrics.Core.Api
             public int Version { get; set; }
         }
 
-        public static TotpReturn GenerateTotp(long serverTimeMilliseconds, bool force = false)
+        public static TotpReturn GenerateTotp(long serverTimeMilliseconds, bool force = false, ILogger? logger = null)
         {
-            var (secret, version, cached) = GetSecretAndVersion(force).GetAwaiter().GetResult();
+            var (secret, version, cached) = GetSecretAndVersion(force, logger).GetAwaiter().GetResult();
 
             long counter = serverTimeMilliseconds / 1000 / Period;
             byte[] counterBytes = BitConverter.GetBytes(counter);
@@ -90,21 +100,25 @@ namespace CSharpSpotiLyrics.Core.Api
             return Encoding.UTF8.GetString(base64Bytes);
         }
 
-        private static async Task<(byte[] secret, int version, bool cached)> GetSecretAndVersion(bool forceNew = false)
+        private static async Task<(byte[] secret, int version, bool cached)> GetSecretAndVersion(bool forceNew = false, ILogger? logger = null)
         {
-            SecretVersionJSON cache = null;
+            SecretVersionJSON? cache = null;
             try
             {
-                if (File.Exists(TotpFilePath) && !forceNew)
-                    cache = JsonSerializer.Deserialize<SecretVersionJSON>(File.ReadAllText(TotpFilePath));
+                // Atomic file reading to prevent TOCTOU race conditions
+                string? cachedText = File.ReadAllText(TotpFilePath);
+                if (!string.IsNullOrEmpty(cachedText) && !forceNew)
+                {
+                    cache = JsonSerializer.Deserialize<SecretVersionJSON>(cachedText);
+                }
             }
             catch { cache = null; }
 
-            SecretVersionJSON extractedData = null;
+            SecretVersionJSON? extractedData = null;
 
             if (cache == null)
             {
-                extractedData = await FetchSecretAndHashesAsync();
+                extractedData = await FetchSecretAndHashesAsync(logger);
             }
             else
             {
@@ -118,7 +132,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 }
                 catch
                 {
-                    extractedData = await FetchSecretAndHashesAsync();
+                    extractedData = await FetchSecretAndHashesAsync(logger);
                 }
             }
 
@@ -148,9 +162,9 @@ namespace CSharpSpotiLyrics.Core.Api
             return (Encoding.UTF8.GetBytes(secretKey), version, (cache != null));
         }
 
-        private static async Task<SecretVersionJSON> FetchSecretAndHashesAsync()
+        private static async Task<SecretVersionJSON> FetchSecretAndHashesAsync(ILogger? logger = null)
         {
-            string bestSecret = null;
+            string? bestSecret = null;
             int bestVersion = -1;
             var queryHashes = new Dictionary<string, string>();
 
@@ -161,6 +175,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
                 string html = await _httpClient.GetStringAsync("https://open.spotify.com");
 
+                // Compiled Regex with a 2-second Timeout to mitigate ReDoS vulnerabilities
                 var jsUrlRegex = new Regex(@"(https://[^/]+/cdn/build/web-player/[^""'\s>]+\.js|/cdn/build/web-player/[^""'\s>]+\.js)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
                 var jsUrls = jsUrlRegex.Matches(html)
                     .Cast<Match>()
@@ -176,7 +191,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 var secretRegex = new Regex(@"secret:\s*([""'])(?<secret>(?:(?!\1)[^\\]|\\.)*)\1\s*,\s*version:\s*(?<version>\d+)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
                 var hashRegex = new Regex(@"[""'](?<op>[a-zA-Z0-9_]+)[""']\s*,\s*[""'](?:query|mutation)[""']\s*,\s*[""'](?<hash>[a-f0-9]{64})[""']", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
-                using var throttler = new SemaphoreSlim(3, 3); // Max 3 concurrent JS downloads
+                using var throttler = new SemaphoreSlim(3, 3); // Throttles parallel downloads to avoid RAM spikes
                 var tasks = jsUrls.Select(async url =>
                 {
                     await throttler.WaitAsync();
@@ -187,9 +202,11 @@ namespace CSharpSpotiLyrics.Core.Api
                         var secretMatches = secretRegex.Matches(jsContent);
                         foreach (Match m in secretMatches)
                         {
-                            if (int.TryParse(m.Groups["version"].Value, out int ver))
+                            try
                             {
+                                int ver = int.Parse(m.Groups["version"].Value);
                                 string rawSecret = Regex.Unescape(m.Groups["secret"].Value);
+
                                 lock (queryHashes)
                                 {
                                     if (ver > bestVersion)
@@ -199,6 +216,7 @@ namespace CSharpSpotiLyrics.Core.Api
                                     }
                                 }
                             }
+                            catch { }
                         }
 
                         var hashMatches = hashRegex.Matches(jsContent);
@@ -212,7 +230,7 @@ namespace CSharpSpotiLyrics.Core.Api
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[Warning] Failed to process JS file '{url}': {ex.Message}");
+                        logger?.LogWarning(ex, "Failed to process JS file {Url}", url);
                     }
                     finally
                     {
@@ -222,12 +240,12 @@ namespace CSharpSpotiLyrics.Core.Api
 
                 await Task.WhenAll(tasks);
 
-                Console.WriteLine($"[Info] Total Hashes {queryHashes.Count} Found From open.spotify.com");
+                logger?.LogInformation("Total Hashes {HashCount} Found From open.spotify.com", queryHashes.Count);
 
                 if (queryHashes.Count > 0)
                 {
                     File.WriteAllText(HashPath, JsonSerializer.Serialize(queryHashes));
-                    Console.WriteLine($"[Success] Hashes Saved To '{HashPath}'");
+                    logger?.LogInformation("Hashes Saved To '{HashPath}'", HashPath);
                 }
 
                 if (!string.IsNullOrEmpty(bestSecret))
@@ -237,11 +255,12 @@ namespace CSharpSpotiLyrics.Core.Api
                         Secret = Base64Encode(bestSecret),
                         Version = bestVersion,
                     }));
+                    logger?.LogInformation("TOTP Secret Saved To '{TotpFilePath}'", TotpFilePath);
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Error] FetchSecretAndHashesAsync failed: {ex.Message}");
+                logger?.LogError(ex, "FetchSecretAndHashesAsync execution failed");
             }
 
             return new SecretVersionJSON { Secret = bestSecret, Version = bestVersion };

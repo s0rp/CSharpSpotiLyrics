@@ -2,15 +2,26 @@
 Author : s*rp
 Purpose Of File : Client for interacting with Spotify internal and public APIs.
 Date : 24.04.2025
-Update: 23.01.2026 & 28.07.2026
+Update: 23.01.2026, 28.07.2026 & 29.08.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 - Revised 23.01.2026: 
     - Replaced all V1 REST calls to New GraphQL
 - MINOR UPDT FROM 28.07.2026:
-    - Added Most of Graphql hashes. Also the logic of this codebase finally matched to LRPC_API's Codebase (A project that displays the lyrics of the song I am currently listening to on my website).
+    - Added Most of Graphql hashes.
 - MINOR UPDT FROM 04.08.2026:
-    Now we're fetchin' time from api.
+    - Now we're fetchin' time from api.
 - NOTE FROM 28.07.2026 : I have been running this code on my own site (https://sxrp.me) 24/7 for nearly 4-5 months on my Spot' Acc. I haven't encountered any significant issues, so feel free to use it!!!
+- REFACTORED 29.08.2026:
+    - optimizations & sec updts. (371580a83eead4c1061b0ffbbda9cb47a07bb487)
+        - Throttled concurrent HTTP requests in `GetTracksAsync` and `FetchSecretAndHashesAsync` using `SemaphoreSlim`.
+        - Added a `ConcurrentDictionary`-based reflection property cache in `RenameUsingFormat`.
+        - Configured `LoginAsync` and `GetCurrentSongAsync` to parse JSON directly from response streams.
+        - Added regex timeouts to reduce the risk of ReDoS attacks.
+        - Replaced `File.Exists` checks in `LoginAsync` with `try-catch` blocks for atomic file reads.
+        - Added conditional compilation to use the built-in `Enumerable.Chunk` on modern target frameworks.
+    - Migrated Console.WriteLine to Microsoft.Extensions.Logging.ILogger.
+    - Optimized HTTP requests and stream-based JSON parsing to reduce memory allocations.
+    - Added thread-safe parallel processing for GetTracksAsync.
 
    ▄██▄                     ▄ █   █     █         ▄ ▄ ▄
  ▄██████▄     ▄ ▄       ▄   █ █ ▄ █ ▄ █ █ █   ▄   █ █ █
@@ -20,11 +31,13 @@ Supervisor : Dixiz 3A Neural (Coder MoE)
    ▀██▀                     █ █   █     █         █
 
 (this scannable actually works tho, thanks to SpotifyAsciiScannables)
- 
- */
-using CSharpSpotiLyrics.Core.Exceptions;
-using CSharpSpotiLyrics.Core.Models;
+
+
+
+*/
+
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -38,6 +51,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using CSharpSpotiLyrics.Core.Exceptions;
+using CSharpSpotiLyrics.Core.Models;
+using Microsoft.Extensions.Logging;
 using static CSharpSpotiLyrics.Core.Api.SpotifyTotp;
 
 namespace CSharpSpotiLyrics.Core.Api
@@ -147,6 +163,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         private readonly HttpClient _httpClient;
         private readonly CookieContainer _cookieContainer;
+        private readonly ILogger<SpotifyClient>? _logger;
 
         private string? _accessToken;
         private string? _clientToken;
@@ -161,13 +178,14 @@ namespace CSharpSpotiLyrics.Core.Api
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
-        public SpotifyClient(string spDcToken)
+        public SpotifyClient(string spDcToken, ILogger<SpotifyClient>? logger = null)
         {
             if (string.IsNullOrWhiteSpace(spDcToken))
             {
                 throw new ArgumentNullException(nameof(spDcToken), "sp_dc token cannot be empty.");
             }
 
+            _logger = logger;
             _cookieContainer = new CookieContainer();
             _cookieContainer.Add(new Uri("https://open.spotify.com"), new Cookie("sp_dc", spDcToken));
 
@@ -247,7 +265,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task LoginAsync(bool force = false)
         {
-            Console.WriteLine("[Info] Attempting to log in using sp_dc token...");
+            _logger?.LogInformation("Attempting to log in using sp_dc token...");
             const int maxRetries = 3;
             for (int i = 0; i < maxRetries; i++)
             {
@@ -259,18 +277,17 @@ namespace CSharpSpotiLyrics.Core.Api
                     try
                     {
                         using var requestSTS = new HttpRequestMessage(HttpMethod.Get, "https://open.spotify.com/api/server-time");
-                        // OPTIMIZATION: ResponseHeadersRead prevents buffering the entire response in memory
                         using var responseSTS = await _httpClient.SendAsync(requestSTS, HttpCompletionOption.ResponseHeadersRead);
                         responseSTS.EnsureSuccessStatusCode();
 
-                        // OPTIMIZATION: Read directly from stream instead of allocating a large string
                         using var stream = await responseSTS.Content.ReadAsStreamAsync();
-                        using var document = await JsonDocument.ParseAsync(stream);
-
-                        if (document.RootElement.TryGetProperty("serverTime", out JsonElement serverTimeElement) &&
-                            serverTimeElement.ValueKind == JsonValueKind.Number)
+                        using (JsonDocument document = await JsonDocument.ParseAsync(stream))
                         {
-                            serverTimeSeconds = serverTimeElement.GetInt64();
+                            if (document.RootElement.TryGetProperty("serverTime", out JsonElement serverTimeElement) &&
+                                serverTimeElement.ValueKind == JsonValueKind.Number)
+                            {
+                                serverTimeSeconds = serverTimeElement.GetInt64();
+                            }
                         }
                     }
                     catch
@@ -281,8 +298,8 @@ namespace CSharpSpotiLyrics.Core.Api
                     long localTimeMilliseconds = localTimeSeconds * 1000;
                     long serverTimeMilliseconds = serverTimeSeconds * 1000;
 
-                    TotpReturn totpLocal = SpotifyTotp.GenerateTotp(localTimeMilliseconds, force);
-                    TotpReturn totpServer = SpotifyTotp.GenerateTotp(serverTimeMilliseconds, force);
+                    TotpReturn totpLocal = SpotifyTotp.GenerateTotp(localTimeMilliseconds, force, _logger);
+                    TotpReturn totpServer = SpotifyTotp.GenerateTotp(serverTimeMilliseconds, force, _logger);
                     _TotpCached = totpLocal.isCached;
 
                     string tokenUrl = $"https://open.spotify.com/api/token?reason=init&productType=web-player&totp={totpLocal.Totp}&totpServer={totpServer.Totp}&totpVer={totpLocal.Version}";
@@ -300,7 +317,6 @@ namespace CSharpSpotiLyrics.Core.Api
                         throw new NotValidSpDcException($"Failed to get access token. Status: {response.StatusCode}. Content: {await response.Content.ReadAsStringAsync()}");
                     }
 
-                    // OPTIMIZATION: Stream parsing for access token response
                     using var tokenStream = await response.Content.ReadAsStreamAsync();
                     using (JsonDocument doc = await JsonDocument.ParseAsync(tokenStream))
                     {
@@ -318,7 +334,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
                     if (!_accessToken.StartsWith("BQ"))
                     {
-                        Console.Error.WriteLine($"[Warning] Received potentially invalid token (attempt {i + 1})...");
+                        _logger?.LogWarning("Received potentially invalid token (attempt {Attempt})...", i + 1);
                         if (i < maxRetries - 1) continue;
                         else throw new NotValidSpDcException($"Failed to obtain a valid access token after {maxRetries} attempts.");
                     }
@@ -332,9 +348,8 @@ namespace CSharpSpotiLyrics.Core.Api
                         UpdateHeaders();
                     }
 
-                    Console.WriteLine($"[Success] Logged in successfully. ClientId: {_clientId}");
+                    _logger?.LogInformation("Logged in successfully. ClientId: {ClientId}", _clientId);
 
-                    // --- TOCTOU & ATOMIC FILE READ FIX (Replace File.Exists logic) ---
                     Dictionary<string, string> tempHashTable = OperationToHashTable;
                     try
                     {
@@ -343,13 +358,13 @@ namespace CSharpSpotiLyrics.Core.Api
                         {
                             jsonContent = File.ReadAllText(HashPath);
                         }
-                        catch (FileNotFoundException) { /* Fallback to default hashes silently */ }
-                        catch (DirectoryNotFoundException) { /* Fallback to default hashes silently */ }
+                        catch (FileNotFoundException) { /* Handled silently */ }
+                        catch (DirectoryNotFoundException) { /* Handled silently */ }
 
                         if (!string.IsNullOrEmpty(jsonContent))
                         {
                             Dictionary<string, string>? loadedHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
-                            Console.WriteLine($"[Info] {loadedHashes?.Count} Hash(es) Loaded From .SPOTIFYHASH");
+                            _logger?.LogInformation("{HashCount} Hash(es) Loaded From .SPOTIFYHASH", loadedHashes?.Count);
 
                             if (loadedHashes != null && loadedHashes.Count > 0)
                             {
@@ -357,22 +372,21 @@ namespace CSharpSpotiLyrics.Core.Api
                                 {
                                     OperationToHashTable[kvp.Key] = kvp.Value;
                                 }
-                                Console.WriteLine($"[Success] Internal Hash Table Updated from cache.");
+                                _logger?.LogInformation("Internal Hash Table Updated from cache.");
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[Warning] Failed to load hashes from cache, using default fallback hashes. Error: {ex.Message}");
+                        _logger?.LogWarning(ex, "Failed to load hashes from cache, using default fallback hashes.");
                         OperationToHashTable = tempHashTable;
                     }
-                    // -----------------------------------------------------------------
 
                     return;
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[Error] Login attempt {i + 1} failed: {ex.Message}");
+                    _logger?.LogError(ex, "Login attempt {Attempt} failed", i + 1);
                     if (i == maxRetries - 1)
                     {
                         _isLoggedIn = false;
@@ -383,11 +397,12 @@ namespace CSharpSpotiLyrics.Core.Api
                 }
             }
         }
+
         private async Task GetClientTokenAsync(bool alreadyforced = false)
         {
             try
             {
-                Console.WriteLine("[Info] Fetching Client Token...");
+                _logger?.LogInformation("Fetching Client Token...");
 
                 var payloadObj = new
                 {
@@ -414,22 +429,22 @@ namespace CSharpSpotiLyrics.Core.Api
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
                 request.Content = content;
 
-                using var response = await _httpClient.SendAsync(request);
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.Error.WriteLine($"[Error] ClientToken Request Failed! Status: {response.StatusCode}");
+                    _logger?.LogError("ClientToken Request Failed! Status: {StatusCode}", response.StatusCode);
                     if (_TotpCached && !alreadyforced)
                     {
-                        Console.WriteLine("[Warning] TOTP is cached. Forcing re-login to refresh TOTP and retry Client Token fetch.");
+                        _logger?.LogWarning("TOTP is cached. Forcing re-login to refresh TOTP and retry Client Token fetch.");
                         await LoginAsync(force: true);
                         return;
                     }
                     response.EnsureSuccessStatusCode();
                 }
 
-                var responseContent = await response.Content.ReadAsStringAsync();
-                using (JsonDocument doc = JsonDocument.Parse(responseContent))
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using (JsonDocument doc = await JsonDocument.ParseAsync(stream))
                 {
                     if (doc.RootElement.TryGetProperty("granted_token", out var grantedToken) &&
                         grantedToken.TryGetProperty("token", out var tokenElem))
@@ -442,7 +457,7 @@ namespace CSharpSpotiLyrics.Core.Api
                         }
 
                         _clientTokenExpiresAt = DateTime.UtcNow.AddSeconds(ttl);
-                        Console.WriteLine($"[Success] Client Token obtained.");
+                        _logger?.LogInformation("Client Token obtained.");
                     }
                     else
                     {
@@ -452,7 +467,7 @@ namespace CSharpSpotiLyrics.Core.Api
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Warning] Failed to fetch Client Token: {ex.Message}. Continuing without it.");
+                _logger?.LogWarning(ex, "Failed to fetch Client Token. Continuing without it.");
             }
         }
 
@@ -493,7 +508,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> GetLibraryV3RawAsync(string folderUri, int limit = 50, int offset = 0)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: libraryV3 for folder '{folderUri}'");
+            _logger?.LogInformation("Executing GraphQL: libraryV3 for folder '{FolderUri}'", folderUri);
             var body = new GraphQLBody
             {
                 OperationName = "libraryV3",
@@ -505,7 +520,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> FetchPlaylistMetadataRawAsync(string playlistUri, int limit = 100, int offset = 0)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: fetchPlaylistMetadata for '{playlistUri}'");
+            _logger?.LogInformation("Executing GraphQL: fetchPlaylistMetadata for '{PlaylistUri}'", playlistUri);
             var body = new GraphQLBody
             {
                 OperationName = "fetchPlaylistMetadata",
@@ -517,7 +532,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> QueryAlbumMerchAsync(string albumUri, string deviceId)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: queryAlbumMerch for '{albumUri}'");
+            _logger?.LogInformation("Executing GraphQL: queryAlbumMerch for '{AlbumUri}'", albumUri);
             var body = new GraphQLBody
             {
                 OperationName = "queryAlbumMerch",
@@ -529,7 +544,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> AreEntitiesInLibraryAsync(List<string> uris)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: areEntitiesInLibrary for {uris.Count} entities.");
+            _logger?.LogInformation("Executing GraphQL: areEntitiesInLibrary for {UriCount} entities.", uris.Count);
             var body = new GraphQLBody
             {
                 OperationName = "areEntitiesInLibrary",
@@ -541,7 +556,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> IsCuratedAsync(List<string> uris)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: isCurated for {uris.Count} entities.");
+            _logger?.LogInformation("Executing GraphQL: isCurated for {UriCount} entities.", uris.Count);
             var body = new GraphQLBody
             {
                 OperationName = "isCurated",
@@ -553,7 +568,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> GetCentralisedStatePlayerOptionsAsync(string albumUri, string deviceId)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: centralisedStatePlayerOptions for '{albumUri}'");
+            _logger?.LogInformation("Executing GraphQL: centralisedStatePlayerOptions for '{AlbumUri}'", albumUri);
             var body = new GraphQLBody
             {
                 OperationName = "centralisedStatePlayerOptions",
@@ -565,7 +580,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> DecorateContextTracksAsync(List<string> uris)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: decorateContextTracks for {uris.Count} entities.");
+            _logger?.LogInformation("Executing GraphQL: decorateContextTracks for {UriCount} entities.", uris.Count);
             var body = new GraphQLBody
             {
                 OperationName = "decorateContextTracks",
@@ -577,7 +592,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public async Task<JsonElement> FetchEntitiesForRecentlyPlayedAsync(List<string> uris)
         {
-            Console.WriteLine($"[Info] Executing GraphQL: fetchEntitiesForRecentlyPlayed for {uris.Count} entities.");
+            _logger?.LogInformation("Executing GraphQL: fetchEntitiesForRecentlyPlayed for {UriCount} entities.", uris.Count);
             var body = new GraphQLBody
             {
                 OperationName = "fetchEntitiesForRecentlyPlayed",
@@ -597,7 +612,7 @@ namespace CSharpSpotiLyrics.Core.Api
             if (!artistIdOrUri.StartsWith("spotify:artist:")) artistIdOrUri = "spotify:artist:" + artistIdOrUri;
             if (!trackIdOrUri.StartsWith("spotify:track:")) trackIdOrUri = "spotify:track:" + trackIdOrUri;
 
-            Console.WriteLine($"[Info] Fetching Canvas URL for track '{trackIdOrUri}'");
+            _logger?.LogInformation("Fetching Canvas URL for track '{TrackUri}'", trackIdOrUri);
 
             var body = new GraphQLBody
             {
@@ -609,11 +624,11 @@ namespace CSharpSpotiLyrics.Core.Api
             var result = await SendPathfinderRequest<GraphQLResponse<Data>>(body);
             if (result.Data?.trackUnion?.canvas != null && !string.IsNullOrEmpty(result.Data.trackUnion.canvas.url) && result.Data.trackUnion.canvas.url.EndsWith(".mp4"))
             {
-                Console.WriteLine($"[Success] Canvas URL found.");
+                _logger?.LogInformation("Canvas URL found.");
                 return result.Data?.trackUnion?.canvas.url;
             }
 
-            Console.WriteLine($"[Warning] No Canvas found for this track.");
+            _logger?.LogWarning("No Canvas found for this track.");
             return null;
         }
 
@@ -625,7 +640,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
             if (!artistUri.StartsWith("spotify:artist:")) artistUri = "spotify:artist:" + artistUri;
 
-            Console.WriteLine($"[Info] Fetching Artist Details for '{artistUri}'");
+            _logger?.LogInformation("Fetching Artist Details for '{ArtistUri}'", artistUri);
 
             var body = new GraphQLBody
             {
@@ -648,7 +663,7 @@ namespace CSharpSpotiLyrics.Core.Api
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Error] Failed to fetch artist details: {ex.Message}");
+                _logger?.LogError(ex, "Failed to fetch artist details");
                 return null;
             }
         }
@@ -656,7 +671,7 @@ namespace CSharpSpotiLyrics.Core.Api
         public async Task<SpotifyUser?> GetMeAsync()
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine("[Info] Fetching User Profile...");
+            _logger?.LogInformation("Fetching User Profile...");
             try
             {
                 var body = new GraphQLBody
@@ -680,7 +695,7 @@ namespace CSharpSpotiLyrics.Core.Api
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Warning] GetMeAsync failed: {ex.Message}");
+                _logger?.LogWarning(ex, "GetMeAsync failed");
                 var cookieUser = _cookieContainer.GetCookies(new Uri("https://open.spotify.com"))["sp_user"]?.Value;
                 return new SpotifyUser { Id = cookieUser ?? "Unknown", DisplayName = cookieUser ?? "User", Country = "XX" };
             }
@@ -689,7 +704,7 @@ namespace CSharpSpotiLyrics.Core.Api
         public async Task<SpotifyPlaylist?> GetPlaylistAsync(string playlistId)
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine($"[Info] Fetching Playlist '{playlistId}'");
+            _logger?.LogInformation("Fetching Playlist '{PlaylistId}'", playlistId);
             try
             {
                 var body = new GraphQLBody
@@ -781,7 +796,7 @@ namespace CSharpSpotiLyrics.Core.Api
         public async Task<PagingObject<SimplePlaylistObject>?> GetCurrentUserPlaylistsAsync(int limit = 50, int offset = 0)
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine("[Info] Fetching Current User Playlists...");
+            _logger?.LogInformation("Fetching Current User Playlists...");
             try
             {
                 var body = new GraphQLBody
@@ -839,7 +854,7 @@ namespace CSharpSpotiLyrics.Core.Api
         public async Task<SpotifyAlbum?> GetAlbumAsync(string albumId)
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine($"[Info] Fetching Album '{albumId}'");
+            _logger?.LogInformation("Fetching Album '{AlbumId}'", albumId);
             try
             {
                 var body = new GraphQLBody
@@ -977,14 +992,14 @@ namespace CSharpSpotiLyrics.Core.Api
         public async Task<SearchResult?> SearchAsync(string query, string type, int limit)
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine("[Warning] Search via GraphQL not fully implemented (missing reliable hash). Returning empty.");
+            _logger?.LogWarning("Search via GraphQL not fully implemented (missing reliable hash). Returning empty.");
             return new SearchResult();
         }
 
         public async Task<PagingObject<SavedAlbumObject>?> GetCurrentUserSavedAlbumsAsync(int limit = 50, int offset = 0)
         {
             await EnsureLoggedInAsync();
-            Console.WriteLine("[Info] Fetching Current User Saved Albums...");
+            _logger?.LogInformation("Fetching Current User Saved Albums...");
             try
             {
                 var body = new GraphQLBody
@@ -1045,10 +1060,9 @@ namespace CSharpSpotiLyrics.Core.Api
             if (trackIds == null || !trackIds.Any()) throw new ArgumentNullException(nameof(trackIds));
             await EnsureLoggedInAsync();
 
-            Console.WriteLine($"[Info] Fetching Tracks metadata for {trackIds.Count()} items via REST...");
-
-            var spotifyTracks = new System.Collections.Concurrent.ConcurrentBag<SpotifyTrack>();
-            using var throttler = new SemaphoreSlim(10, 10); // Throttle concurrent requests to 10
+            _logger?.LogInformation("Fetching Tracks metadata for {TrackCount} items via REST...", trackIds.Count());
+            var spotifyTracks = new ConcurrentBag<SpotifyTrack>();
+            using var throttler = new SemaphoreSlim(10, 10);
 
             var tasks = trackIds.Select(async trackId =>
             {
@@ -1057,13 +1071,12 @@ namespace CSharpSpotiLyrics.Core.Api
                 {
                     string hexId = SpotifyIdConverter.Base62ToHex(trackId);
                     string url = $"https://spclient.wg.spotify.com/metadata/4/track/{hexId}?market=from_token";
-
                     using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
+                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
                     if (!response.IsSuccessStatusCode)
                     {
-                        Console.Error.WriteLine($"[Error] Failed to fetch metadata for {trackId}. Status: {response.StatusCode}");
+                        _logger?.LogError("Failed to fetch metadata for {TrackId}. Status: {StatusCode}", trackId, response.StatusCode);
                         return;
                     }
 
@@ -1075,7 +1088,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[Error] Error fetching track {trackId}: {ex.Message}");
+                    _logger?.LogError(ex, "Error fetching track {TrackId}", trackId);
                 }
                 finally
                 {
@@ -1133,7 +1146,6 @@ namespace CSharpSpotiLyrics.Core.Api
                 response.EnsureSuccessStatusCode();
 
                 using var stream = await response.Content.ReadAsStreamAsync();
-
                 if (stream.Length == 0) return null;
 
                 return await JsonSerializer.DeserializeAsync<CurrentlyPlayingContext>(stream, _jsonOptions);
@@ -1149,26 +1161,28 @@ namespace CSharpSpotiLyrics.Core.Api
             if (string.IsNullOrWhiteSpace(trackId)) throw new ArgumentNullException(nameof(trackId));
             await EnsureLoggedInAsync();
 
-            Console.WriteLine($"[Info] Fetching Lyrics for Track '{trackId}'...");
+            _logger?.LogInformation("Fetching Lyrics for Track '{TrackId}'...", trackId);
             string lyricsUrl = $"https://spclient.wg.spotify.com/color-lyrics/v2/track/{trackId}?format=json&market=from_token";
 
             try
             {
                 using var requestMessage = new HttpRequestMessage(HttpMethod.Get, lyricsUrl);
-                using var response = await _httpClient.SendAsync(requestMessage);
+                using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead);
 
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
-                    Console.WriteLine("[Warning] Lyrics not found.");
+                    _logger?.LogWarning("Lyrics not found.");
                     return null;
                 }
 
                 response.EnsureSuccessStatusCode();
-                return await response.Content.ReadFromJsonAsync<LyricsResponse>(_jsonOptions);
+
+                using var stream = await response.Content.ReadAsStreamAsync();
+                return await JsonSerializer.DeserializeAsync<LyricsResponse>(stream, _jsonOptions);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Error] Error fetching lyrics for {trackId}: {ex}");
+                _logger?.LogError(ex, "Error fetching lyrics for {TrackId}", trackId);
                 throw new LyricsNotFoundException($"Failed to get lyrics for track {trackId}: {ex.Message}", ex);
             }
         }
