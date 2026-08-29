@@ -160,19 +160,25 @@ namespace CSharpSpotiLyrics.Core.Api
 
                 string html = await _httpClient.GetStringAsync("https://open.spotify.com");
 
-                var jsUrlRegex = new Regex(@"(https://[^/]+/cdn/build/web-player/[^""'\s>]+\.js|/cdn/build/web-player/[^""'\s>]+\.js)");
-                var jsUrls = jsUrlRegex.Matches(html).Select(m =>
-                {
-                    string val = m.Value;
-                    if (!val.StartsWith("http")) val = "https://open.spotifycdn.com" + val;
-                    return val;
-                }).Distinct().ToList();
+                var jsUrlRegex = new Regex(@"(https://[^/]+/cdn/build/web-player/[^""'\s>]+\.js|/cdn/build/web-player/[^""'\s>]+\.js)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
+                var jsUrls = jsUrlRegex.Matches(html)
+                    .Cast<Match>()
+                    .Select(m =>
+                    {
+                        string val = m.Value;
+                        if (!val.StartsWith("http")) val = "https://open.spotifycdn.com" + val;
+                        return val;
+                    })
+                    .Distinct()
+                    .ToList();
 
-                var secretRegex = new Regex(@"secret:\s*([""'])(?<secret>(?:(?!\1)[^\\]|\\.)*)\1\s*,\s*version:\s*(?<version>\d+)");
-                var hashRegex = new Regex(@"[""'](?<op>[a-zA-Z0-9_]+)[""']\s*,\s*[""'](?:query|mutation)[""']\s*,\s*[""'](?<hash>[a-f0-9]{64})[""']");
+                var secretRegex = new Regex(@"secret:\s*([""'])(?<secret>(?:(?!\1)[^\\]|\\.)*)\1\s*,\s*version:\s*(?<version>\d+)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
+                var hashRegex = new Regex(@"[""'](?<op>[a-zA-Z0-9_]+)[""']\s*,\s*[""'](?:query|mutation)[""']\s*,\s*[""'](?<hash>[a-f0-9]{64})[""']", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
+                using var throttler = new SemaphoreSlim(3, 3); // Max 3 concurrent JS downloads
                 var tasks = jsUrls.Select(async url =>
                 {
+                    await throttler.WaitAsync();
                     try
                     {
                         string jsContent = await _httpClient.GetStringAsync(url);
@@ -180,11 +186,9 @@ namespace CSharpSpotiLyrics.Core.Api
                         var secretMatches = secretRegex.Matches(jsContent);
                         foreach (Match m in secretMatches)
                         {
-                            try
+                            if (int.TryParse(m.Groups["version"].Value, out int ver))
                             {
-                                int ver = int.Parse(m.Groups["version"].Value);
                                 string rawSecret = Regex.Unescape(m.Groups["secret"].Value);
-
                                 lock (queryHashes)
                                 {
                                     if (ver > bestVersion)
@@ -194,7 +198,6 @@ namespace CSharpSpotiLyrics.Core.Api
                                     }
                                 }
                             }
-                            catch { }
                         }
 
                         var hashMatches = hashRegex.Matches(jsContent);
@@ -206,17 +209,24 @@ namespace CSharpSpotiLyrics.Core.Api
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[Warning] Failed to process JS file '{url}': {ex.Message}");
+                    }
+                    finally
+                    {
+                        throttler.Release();
+                    }
                 });
 
                 await Task.WhenAll(tasks);
 
-                Console.WriteLine($"Total Hashes {queryHashes.Count} Found From open.spotify.com");
+                Console.WriteLine($"[Info] Total Hashes {queryHashes.Count} Found From open.spotify.com");
 
                 if (queryHashes.Count > 0)
                 {
                     File.WriteAllText(HashPath, JsonSerializer.Serialize(queryHashes));
-                    Console.WriteLine($"[LOG] Hashes Saved To '{HashPath}'");
+                    Console.WriteLine($"[Success] Hashes Saved To '{HashPath}'");
                 }
 
                 if (!string.IsNullOrEmpty(bestSecret))
@@ -228,7 +238,10 @@ namespace CSharpSpotiLyrics.Core.Api
                     }));
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[Error] FetchSecretAndHashesAsync failed: {ex.Message}");
+            }
 
             return new SecretVersionJSON { Secret = bestSecret, Version = bestVersion };
         }

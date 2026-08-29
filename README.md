@@ -1,4 +1,4 @@
-$$\large\color{green}\textbf{**Status Update (04/08/2026):** Version 2.0.1 Release is WORKING!}$$
+$$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 & 2.0.2 Release is WORKING!}$$
 
 [![C#](https://img.shields.io/badge/Language-C%23-512BD4?style=for-the-badge&logo=csharp&logoColor=white)](https://dotnet.microsoft.com/)
 [![Framework](https://img.shields.io/badge/Framework-.NET%206.0%2B-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)

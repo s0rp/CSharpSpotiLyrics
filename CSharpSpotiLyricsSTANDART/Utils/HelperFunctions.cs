@@ -5,6 +5,7 @@ Date : 24.04.2025
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
 using CSharpSpotiLyrics.Core.Models; // Assuming TrackInfo model exists here or nearby
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -44,6 +45,8 @@ namespace CSharpSpotiLyrics.Core.Utils
             return InvalidFileCharsRegex.Replace(fileName, "_").Trim();
         }
 
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Reflection.PropertyInfo> _propertyCache = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Reflection.PropertyInfo>();
+
         public static string RenameUsingFormat(string formatString, TrackInfoPlaceholder data)
         {
             // Use Regex.Replace with a MatchEvaluator for robust replacement
@@ -52,15 +55,25 @@ namespace CSharpSpotiLyrics.Core.Utils
                 match =>
                 {
                     string key = match.Groups[1].Value;
-                    object? value = data.GetType()
-                        .GetProperty(
+
+                    if (!_propertyCache.TryGetValue(key, out var prop)) //Cpu intensive operation, so caching is used.
+                    {
+                        prop = data.GetType().GetProperty(
                             key,
                             System.Reflection.BindingFlags.IgnoreCase
                                 | System.Reflection.BindingFlags.Public
                                 | System.Reflection.BindingFlags.Instance
-                        )
-                        ?.GetValue(data);
+                        );
+
+                        if (prop != null)
+                        {
+                            _propertyCache[key] = prop;
+                        }
+                    }
+
+                    object? value = prop?.GetValue(data);
                     // Handle different property types gracefully
+
                     return value switch
                     {
                         null => "", // Replace with empty string if property not found or null
@@ -71,7 +84,7 @@ namespace CSharpSpotiLyrics.Core.Utils
                 }
             );
 
-            // Sanitize the final result for file system compatibility
+            // Sanitize the final result for FS compatibility
             return SanitizeFileName(result);
         }
 
@@ -117,7 +130,20 @@ namespace CSharpSpotiLyrics.Core.Utils
         }
 
         // Helper to chunk lists
-        public static IEnumerable<List<T>> Chunk<T>(IEnumerable<T> source, int chunkSize)
+        public static IEnumerable<IEnumerable<T>> Chunk<T>(IEnumerable<T> source, int chunkSize)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize));
+
+#if NET6_0_OR_GREATER
+                        return System.Linq.Enumerable.Chunk(source, chunkSize);
+#else
+            return ChunkIterator(source, chunkSize);
+#endif
+        }
+
+#if !NET6_0_OR_GREATER
+        private static IEnumerable<List<T>> ChunkIterator<T>(IEnumerable<T> source, int chunkSize)
         {
             using var enumerator = source.GetEnumerator();
             while (enumerator.MoveNext())
@@ -130,5 +156,6 @@ namespace CSharpSpotiLyrics.Core.Utils
                 yield return chunk;
             }
         }
+#endif
     }
 }

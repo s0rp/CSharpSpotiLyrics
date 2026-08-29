@@ -259,17 +259,18 @@ namespace CSharpSpotiLyrics.Core.Api
                     try
                     {
                         using var requestSTS = new HttpRequestMessage(HttpMethod.Get, "https://open.spotify.com/api/server-time");
-                        var responseSTS = await _httpClient.SendAsync(requestSTS);
+                        // OPTIMIZATION: ResponseHeadersRead prevents buffering the entire response in memory
+                        using var responseSTS = await _httpClient.SendAsync(requestSTS, HttpCompletionOption.ResponseHeadersRead);
                         responseSTS.EnsureSuccessStatusCode();
 
-                        var jsonString = await responseSTS.Content.ReadAsStringAsync();
-                        using (JsonDocument document = JsonDocument.Parse(jsonString))
+                        // OPTIMIZATION: Read directly from stream instead of allocating a large string
+                        using var stream = await responseSTS.Content.ReadAsStreamAsync();
+                        using var document = await JsonDocument.ParseAsync(stream);
+
+                        if (document.RootElement.TryGetProperty("serverTime", out JsonElement serverTimeElement) &&
+                            serverTimeElement.ValueKind == JsonValueKind.Number)
                         {
-                            if (document.RootElement.TryGetProperty("serverTime", out JsonElement serverTimeElement) &&
-                                serverTimeElement.ValueKind == JsonValueKind.Number)
-                            {
-                                serverTimeSeconds = serverTimeElement.GetInt64();
-                            }
+                            serverTimeSeconds = serverTimeElement.GetInt64();
                         }
                     }
                     catch
@@ -287,7 +288,7 @@ namespace CSharpSpotiLyrics.Core.Api
                     string tokenUrl = $"https://open.spotify.com/api/token?reason=init&productType=web-player&totp={totpLocal.Totp}&totpServer={totpServer.Totp}&totpVer={totpLocal.Version}";
 
                     using var requestMessage = new HttpRequestMessage(HttpMethod.Get, tokenUrl);
-                    using var response = await _httpClient.SendAsync(requestMessage);
+                    using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead);
 
                     if (response.StatusCode == HttpStatusCode.Found)
                     {
@@ -299,9 +300,9 @@ namespace CSharpSpotiLyrics.Core.Api
                         throw new NotValidSpDcException($"Failed to get access token. Status: {response.StatusCode}. Content: {await response.Content.ReadAsStringAsync()}");
                     }
 
-                    var responseContent = await response.Content.ReadAsStringAsync();
-
-                    using (JsonDocument doc = JsonDocument.Parse(responseContent))
+                    // OPTIMIZATION: Stream parsing for access token response
+                    using var tokenStream = await response.Content.ReadAsStreamAsync();
+                    using (JsonDocument doc = await JsonDocument.ParseAsync(tokenStream))
                     {
                         var root = doc.RootElement;
                         if (root.TryGetProperty("accessToken", out var tokenProp))
@@ -333,14 +334,21 @@ namespace CSharpSpotiLyrics.Core.Api
 
                     Console.WriteLine($"[Success] Logged in successfully. ClientId: {_clientId}");
 
+                    // --- TOCTOU & ATOMIC FILE READ FIX (Replace File.Exists logic) ---
                     Dictionary<string, string> tempHashTable = OperationToHashTable;
                     try
                     {
-                        if (File.Exists(HashPath))
+                        string? jsonContent = null;
+                        try
                         {
-                            string jsonContent = File.ReadAllText(HashPath);
-                            Dictionary<string, string> loadedHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
+                            jsonContent = File.ReadAllText(HashPath);
+                        }
+                        catch (FileNotFoundException) { /* Fallback to default hashes silently */ }
+                        catch (DirectoryNotFoundException) { /* Fallback to default hashes silently */ }
 
+                        if (!string.IsNullOrEmpty(jsonContent))
+                        {
+                            Dictionary<string, string>? loadedHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
                             Console.WriteLine($"[Info] {loadedHashes?.Count} Hash(es) Loaded From .SPOTIFYHASH");
 
                             if (loadedHashes != null && loadedHashes.Count > 0)
@@ -358,6 +366,7 @@ namespace CSharpSpotiLyrics.Core.Api
                         Console.WriteLine($"[Warning] Failed to load hashes from cache, using default fallback hashes. Error: {ex.Message}");
                         OperationToHashTable = tempHashTable;
                     }
+                    // -----------------------------------------------------------------
 
                     return;
                 }
@@ -1038,21 +1047,25 @@ namespace CSharpSpotiLyrics.Core.Api
             await EnsureLoggedInAsync();
 
             Console.WriteLine($"[Info] Fetching Tracks metadata for {trackIds.Count()} items via REST...");
-            var spotifyTracks = new List<SpotifyTrack>();
 
-            foreach (var trackId in trackIds)
+            var spotifyTracks = new System.Collections.Concurrent.ConcurrentBag<SpotifyTrack>();
+            using var throttler = new SemaphoreSlim(10, 10); // Throttle concurrent requests to 10
+
+            var tasks = trackIds.Select(async trackId =>
             {
+                await throttler.WaitAsync();
                 try
                 {
                     string hexId = SpotifyIdConverter.Base62ToHex(trackId);
                     string url = $"https://spclient.wg.spotify.com/metadata/4/track/{hexId}?market=from_token";
-                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
 
-                    var response = await _httpClient.SendAsync(request);
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
                     if (!response.IsSuccessStatusCode)
                     {
                         Console.Error.WriteLine($"[Error] Failed to fetch metadata for {trackId}. Status: {response.StatusCode}");
-                        continue;
+                        return;
                     }
 
                     var metadata = await response.Content.ReadFromJsonAsync<MetadataTrackResponse>(_jsonOptions);
@@ -1065,9 +1078,15 @@ namespace CSharpSpotiLyrics.Core.Api
                 {
                     Console.Error.WriteLine($"[Error] Error fetching track {trackId}: {ex.Message}");
                 }
-            }
+                finally
+                {
+                    throttler.Release();
+                }
+            });
 
-            return new TracksResponse { Tracks = spotifyTracks };
+            await Task.WhenAll(tasks);
+
+            return new TracksResponse { Tracks = spotifyTracks.ToList() };
         }
 
         private SpotifyTrack MapMetadataToSpotifyTrack(MetadataTrackResponse meta, string originalId)
@@ -1106,14 +1125,19 @@ namespace CSharpSpotiLyrics.Core.Api
             await EnsureLoggedInAsync();
             try
             {
-                var response = await _httpClient.GetAsync("me/player/currently-playing?market=from_token");
-                if (response.StatusCode == HttpStatusCode.NoContent || response.StatusCode == HttpStatusCode.NotFound) return null;
+                using var request = new HttpRequestMessage(HttpMethod.Get, "me/player/currently-playing?market=from_token");
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                if (response.StatusCode == HttpStatusCode.NoContent || response.StatusCode == HttpStatusCode.NotFound)
+                    return null;
 
                 response.EnsureSuccessStatusCode();
-                var content = await response.Content.ReadAsStringAsync();
-                if (string.IsNullOrWhiteSpace(content)) return null;
 
-                return JsonSerializer.Deserialize<CurrentlyPlayingContext>(content, _jsonOptions);
+                using var stream = await response.Content.ReadAsStreamAsync();
+
+                if (stream.Length == 0) return null;
+
+                return await JsonSerializer.DeserializeAsync<CurrentlyPlayingContext>(stream, _jsonOptions);
             }
             catch (Exception ex)
             {
