@@ -2,14 +2,18 @@
 Author : s*rp
 Purpose Of File : Reads metadata from local audio files and fetches corresponding lyrics.
 Date : 24.04.2025
+Update: 23.01.2026, 29.08.2026, 02.09.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
-using System.Diagnostics;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using CSharpSpotiLyrics.Core.Api;
 using CSharpSpotiLyrics.Core.Exceptions;
 using CSharpSpotiLyrics.Core.Models;
-using CSharpSpotiLyrics.Core.Utils; // For HelperFunctions
-using TagLib; // Requires TagLibSharp NuGet package
+using CSharpSpotiLyrics.Core.Utils;
 
 namespace CSharpSpotiLyrics.Console.App
 {
@@ -17,7 +21,7 @@ namespace CSharpSpotiLyrics.Console.App
     {
         private readonly SpotifyClient _client;
         private readonly Config _config;
-        private readonly LyricsHandler _lyricsHandler; // To reuse formatting/saving
+        private readonly LyricsHandler _lyricsHandler;
 
         public FileMetadataReader(SpotifyClient client, Config config, LyricsHandler lyricsHandler)
         {
@@ -31,23 +35,24 @@ namespace CSharpSpotiLyrics.Console.App
             if (!Directory.Exists(directoryPath))
             {
                 System.Console.Error.WriteLine($"Directory not found: {directoryPath}");
-                return new List<string>(); // Return empty list indicating failure
+                return new List<string>();
             }
 
             System.Console.WriteLine($"Scanning directory for audio files: {directoryPath}");
-            var supportedExtensions = new HashSet<string>
+            var supportedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 ".mp3",
                 ".flac",
+                ".wav",
                 ".m4a",
                 ".ogg",
                 ".opus",
-                ".wav",
-                ".aiff"
-            }; // Add more if needed
+                ".aac"
+            };
+
             var audioFiles = Directory
                 .EnumerateFiles(directoryPath, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(f => supportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .Where(f => supportedExtensions.Contains(Path.GetExtension(f)))
                 .ToList();
 
             if (!audioFiles.Any())
@@ -60,7 +65,7 @@ namespace CSharpSpotiLyrics.Console.App
                 $"Found {audioFiles.Count} audio files. Searching Spotify and fetching lyrics..."
             );
 
-            List<string> unableToFindLyrics = new();
+            List<string> unableToFindLyrics = new List<string>();
             int processedCount = 0;
             int foundCount = 0;
             int skippedExistingCount = 0;
@@ -71,48 +76,79 @@ namespace CSharpSpotiLyrics.Console.App
                 string fileNameOnly = Path.GetFileName(filePath);
                 string lrcFilePath = Path.ChangeExtension(filePath, ".lrc");
 
-                // Progress Update
                 UpdateProgress(processedCount, audioFiles.Count, $"Processing: {fileNameOnly}");
 
-                if (System.IO.File.Exists(lrcFilePath) && !_config.ForceDownload)
+                if (File.Exists(lrcFilePath) && !_config.ForceDownload)
                 {
                     skippedExistingCount++;
-                    continue; // Skip if LRC exists and not forcing
+                    continue;
                 }
 
                 string? trackId = null;
                 SpotifyTrack? foundTrack = null;
-                string trackIdentifier = fileNameOnly; // Default identifier if tags fail
+                string trackIdentifier = fileNameOnly;
 
                 try
                 {
-                    // Use TagLibSharp to read metadata
-                    using (var tagFile = TagLib.File.Create(filePath))
+                    // 1. Attempt to read embedded audio metadata tags
+                    var tags = SimpleAudioTagReader.ReadTags(filePath);
+                    string? title = tags.Title;
+                    string? album = tags.Album;
+                    string? firstArtist = tags.Artist;
+
+                    // 2. Fallback: Parse Title and Artist from Filename if embedded tags are missing
+                    if (string.IsNullOrWhiteSpace(title))
                     {
-                        string? title = tagFile.Tag.Title;
-                        string? album = tagFile.Tag.Album;
-                        string? firstArtist =
-                            tagFile.Tag.FirstPerformer ?? tagFile.Tag.FirstAlbumArtist; // Prioritize performer
+                        string nameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
 
-                        if (!string.IsNullOrWhiteSpace(title))
+                        // Check for common "Artist - Title" format
+                        int separatorIndex = nameWithoutExt.IndexOf(" - ", StringComparison.Ordinal);
+                        if (separatorIndex > 0)
                         {
-                            trackIdentifier = $"{firstArtist ?? "Unknown Artist"} - {title}"; // Better identifier for messages
+                            firstArtist = nameWithoutExt.Substring(0, separatorIndex).Trim();
+                            title = nameWithoutExt.Substring(separatorIndex + 3).Trim();
+                        }
+                        else
+                        {
+                            title = nameWithoutExt.Trim();
+                        }
+                    }
 
-                            // Construct search query (be specific)
-                            // Query format recommended by Spotify: track:name artist:name album:name year:YYYY etc.
-                            var queryParts = new List<string>();
-                            queryParts.Add($"track:\"{title.Replace("\"", "")}\""); // Quote and remove internal quotes
+                    if (!string.IsNullOrWhiteSpace(title))
+                    {
+                        trackIdentifier = !string.IsNullOrWhiteSpace(firstArtist)
+                            ? $"{firstArtist} - {title}"
+                            : title;
+
+                        var queryParts = new List<string>
+                        {
+                            $"track:\"{title.Replace("\"", "")}\""
+                        };
+                        if (!string.IsNullOrWhiteSpace(firstArtist))
+                            queryParts.Add($"artist:\"{firstArtist.Replace("\"", "")}\"");
+                        if (!string.IsNullOrWhiteSpace(album))
+                            queryParts.Add($"album:\"{album.Replace("\"", "")}\"");
+
+                        string searchQuery = string.Join(" ", queryParts);
+
+                        var searchResult = await _client.SearchAsync(searchQuery, "track", 1);
+
+                        if (
+                            searchResult?.Tracks?.Items?.Count > 0
+                            && searchResult.Tracks.Items[0] != null
+                        )
+                        {
+                            foundTrack = searchResult.Tracks.Items[0];
+                            trackId = foundTrack.Id;
+                        }
+                        else
+                        {
+                            // Secondary fallback: simplified query
+                            searchQuery = $"track:\"{title.Replace("\"", "")}\"";
                             if (!string.IsNullOrWhiteSpace(firstArtist))
-                                queryParts.Add($"artist:\"{firstArtist.Replace("\"", "")}\"");
-                            if (!string.IsNullOrWhiteSpace(album))
-                                queryParts.Add($"album:\"{album.Replace("\"", "")}\"");
-                            // Maybe add year: tagFile.Tag.Year ?
+                                searchQuery += $" artist:\"{firstArtist.Replace("\"", "")}\"";
 
-                            string searchQuery = string.Join(" ", queryParts);
-
-                            // Search on Spotify
-                            var searchResult = await _client.SearchAsync(searchQuery, "track", 1); // Search for top 1 track
-
+                            searchResult = await _client.SearchAsync(searchQuery, "track", 1);
                             if (
                                 searchResult?.Tracks?.Items?.Count > 0
                                 && searchResult.Tracks.Items[0] != null
@@ -121,52 +157,22 @@ namespace CSharpSpotiLyrics.Console.App
                                 foundTrack = searchResult.Tracks.Items[0];
                                 trackId = foundTrack.Id;
                             }
-                            else
-                            {
-                                // Fallback: Try searching just by title and artist if specific search failed
-                                searchQuery = $"track:\"{title.Replace("\"", "")}\"";
-                                if (!string.IsNullOrWhiteSpace(firstArtist))
-                                    searchQuery += $" artist:\"{firstArtist.Replace("\"", "")}\"";
-
-                                searchResult = await _client.SearchAsync(searchQuery, "track", 1);
-                                if (
-                                    searchResult?.Tracks?.Items?.Count > 0
-                                    && searchResult.Tracks.Items[0] != null
-                                )
-                                {
-                                    foundTrack = searchResult.Tracks.Items[0];
-                                    trackId = foundTrack.Id;
-                                }
-                            }
                         }
-                        else
-                        {
-                            System.Console.Error.WriteLine(
-                                $"\nWarning: Could not read Title tag for '{fileNameOnly}'. Skipping Spotify search."
-                            );
-                        }
-                    } // using tagFile ensures disposal
+                    }
+                    else
+                    {
+                        System.Console.Error.WriteLine(
+                            $"\nWarning: Could not parse track info from '{fileNameOnly}'. Skipping Spotify search."
+                        );
+                    }
                 }
-                catch (CorruptFileException cfe)
+                catch (Exception ex)
                 {
                     System.Console.Error.WriteLine(
-                        $"\nWarning: Could not read tags from '{fileNameOnly}' (corrupt file?): {cfe.Message}"
-                    );
-                }
-                catch (UnsupportedFormatException ufe)
-                {
-                    System.Console.Error.WriteLine(
-                        $"\nWarning: Unsupported format or could not read tags from '{fileNameOnly}': {ufe.Message}"
-                    );
-                }
-                catch (Exception ex) // Catch other potential TagLib or Spotify search errors
-                {
-                    System.Console.Error.WriteLine(
-                        $"\nError processing tags or searching Spotify for '{fileNameOnly}': {ex.Message}"
+                        $"\nError processing file or searching Spotify for '{fileNameOnly}': {ex.Message}"
                     );
                 }
 
-                // If we found a track ID, try to get lyrics
                 if (trackId != null && foundTrack != null)
                 {
                     try
@@ -174,9 +180,9 @@ namespace CSharpSpotiLyrics.Console.App
                         var lyricsResponse = await _client.GetLyricsAsync(trackId);
                         if (lyricsResponse?.Lyrics?.Lines != null)
                         {
-                            var trackInfo = HelperFunctions.SanitizeTrackData(foundTrack); // Use found track data
-                            string lrcContent = _lyricsHandler.FormatLrc(lyricsResponse, trackInfo); // Reuse formatter
-                            await _lyricsHandler.SaveLyricsAsync(lrcContent, lrcFilePath); // Reuse saver
+                            var trackInfo = HelperFunctions.SanitizeTrackData(foundTrack);
+                            string lrcContent = _lyricsHandler.FormatLrc(lyricsResponse, trackInfo);
+                            await _lyricsHandler.SaveLyricsAsync(lrcContent, lrcFilePath);
                             foundCount++;
                         }
                         else
@@ -201,25 +207,17 @@ namespace CSharpSpotiLyrics.Console.App
                 else if (
                     !string.IsNullOrWhiteSpace(trackIdentifier)
                     && trackIdentifier != fileNameOnly
-                ) // Only add to unable list if we had tags but no match/ID
+                )
                 {
                     unableToFindLyrics.Add(
                         trackIdentifier + " (Could not find matching track on Spotify)"
                     );
                 }
-                else if (
-                    string.IsNullOrWhiteSpace(trackIdentifier)
-                    || trackIdentifier == fileNameOnly
-                )
-                {
-                    // File was likely skipped due to missing tags or tag read error, already warned.
-                    // Don't add generic filename to "unable" list unless needed.
-                }
 
-                await Task.Delay(50); // Small delay between files to avoid hammering Spotify search
+                await Task.Delay(50);
             }
 
-            ClearCurrentConsoleLine(); // Clear the progress line
+            ClearCurrentConsoleLine();
             System.Console.WriteLine(
                 $"\nLocal file scan complete. Found lyrics for: {foundCount} files. Skipped existing: {skippedExistingCount}."
             );
@@ -227,7 +225,6 @@ namespace CSharpSpotiLyrics.Console.App
             return unableToFindLyrics;
         }
 
-        // --- Console Progress Helper (Copied from LyricsHandler for self-containment or move to a shared Util) ---
         private static readonly object ConsoleLock = new object();
         private static int lastProgressLength = 0;
 
@@ -237,7 +234,7 @@ namespace CSharpSpotiLyrics.Console.App
             {
                 int percent = (int)(((double)current / total) * 100);
                 string progressBar =
-                    $"[{new string('#', percent / 5)}{new string('-', 20 - percent / 5)}]"; // Simple 20 char bar
+                    $"[{new string('#', percent / 5)}{new string('-', 20 - percent / 5)}]";
                 string output =
                     $"\rProgress: {current}/{total} {progressBar} {percent}% - {message}";
 
@@ -247,7 +244,7 @@ namespace CSharpSpotiLyrics.Console.App
                     output += new string(' ', lastProgressLength - currentLength);
                 }
                 System.Console.Write(output);
-                lastProgressLength = Math.Min(output.Length, System.Console.BufferWidth - 1); // Prevent overflow
+                lastProgressLength = Math.Min(output.Length, System.Console.BufferWidth > 0 ? System.Console.BufferWidth - 1 : 80);
             }
         }
 
@@ -257,7 +254,6 @@ namespace CSharpSpotiLyrics.Console.App
             {
                 if (lastProgressLength > 0)
                 {
-                    // Ensure we don't try to write outside buffer width
                     int clearLength = Math.Min(
                         lastProgressLength,
                         System.Console.BufferWidth > 0 ? System.Console.BufferWidth - 1 : 80

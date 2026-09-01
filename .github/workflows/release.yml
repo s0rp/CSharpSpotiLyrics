@@ -1,0 +1,184 @@
+name: Build and Publish Release
+run-name: Release ${{ github.ref_name }} # Ekrandaki başlığı her zaman bastığınız Tag yapar!
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: write # Required for GitHub Releases
+  id-token: write # Required for NuGet Trusted Publishing (OIDC)
+
+jobs:
+  build-and-publish-nuget:
+    name: Build & Push NuGet Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract Tag Version
+        id: get_version
+        run: |
+          RAW_TAG=${GITHUB_REF#refs/tags/}
+          # Strip leading 'v' for NuGet SemVer (e.g. v2.1.0-canary.1 -> 2.1.0-canary.1)
+          VERSION=${RAW_TAG#v}
+          echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_ENV
+
+      # Explicit build for all target frameworks first to ensure DLLs are on disk
+      - name: Build Library
+        run: dotnet build CSharpSpotiLyrics/CSharpSpotiLyrics.csproj -c Release
+
+      # Pack NuGet package (.nupkg) using the compiled outputs
+      - name: Pack NuGet Package
+        run: dotnet pack CSharpSpotiLyrics/CSharpSpotiLyrics.csproj -c Release --no-build -p:PackageVersion=${{ env.PACKAGE_VERSION }} -o ./nupkg
+
+      # Keyless OIDC Login using Trusted Publishing
+      - name: NuGet Login (OIDC Trusted Publishing)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: s0rp # Your nuget.org username
+
+      # Push to NuGet.org (Uses short-lived token from NuGet/login step)
+      - name: Push to NuGet Gallery
+        run: dotnet nuget push ./nupkg/*.nupkg --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      # Publish & Zip raw DLL files for GitHub Release assets
+      - name: Publish .NET 8.0 DLL
+        run: dotnet publish CSharpSpotiLyrics/CSharpSpotiLyrics.csproj -c Release -f net8.0 -o ./dll_net8
+      - name: Zip .NET 8.0 DLL
+        run: zip -j DLL_net8.0.zip ./dll_net8/*
+
+      - name: Publish .NET Standard 2.0 DLL
+        run: dotnet publish CSharpSpotiLyrics/CSharpSpotiLyrics.csproj -c Release -f netstandard2.0 -o ./dll_netstandard2
+      - name: Zip .NET Standard 2.0 DLL
+        run: zip -j DLL_netstandard2.0.zip ./dll_netstandard2/*
+
+      - name: Upload Library Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-artifacts
+          path: |
+            DLL_net8.0.zip
+            DLL_netstandard2.0.zip
+            nupkg/*.nupkg
+
+  build-cli:
+    name: Build Native AOT CLI (${{ matrix.rid }})
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: windows-latest
+            rid: win-arm64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+          - os: macos-latest
+            rid: osx-x64
+          - os: macos-latest
+            rid: osx-arm64
+            
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Linux AOT Dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      
+      - name: Publish Native AOT CLI
+        run: dotnet publish CSharpSpotiLyricsCLI/CSharpSpotiLyricsCLI.csproj -c Release -r ${{ matrix.rid }} -o ./cli_out
+      
+      # Zip CLI for Windows
+      - name: Zip CLI (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path ".\cli_out\*" -DestinationPath "CLI_${{ matrix.rid }}.zip"
+
+      # Zip CLI for Linux and macOS
+      - name: Zip CLI (Unix)
+        if: runner.os != 'Windows'
+        run: zip -j CLI_${{ matrix.rid }}.zip ./cli_out/*
+
+      - name: Upload CLI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.rid }}
+          path: CLI_${{ matrix.rid }}.zip
+
+  publish-release:
+    name: Create GitHub Release
+    needs: [build-and-publish-nuget, build-cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all Zip and nupkg Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Generate Release Notes & Detect Canary
+        id: notes
+        run: |
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null) || PREV_TAG=""
+          
+          # Detect Canary vs Stable
+          if [[ "$CURRENT_TAG" =~ "canary" || "$CURRENT_TAG" =~ "beta" || "$CURRENT_TAG" =~ "alpha" || "$CURRENT_TAG" =~ "rc" ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
+            echo "RELEASE_TITLE=CSharpSpotiLyrics [Canary] $CURRENT_TAG" >> $GITHUB_ENV
+            echo "> ⚠️ **CANARY / EXPERIMENTAL BUILD:** This release is built from active development branches and may contain bugs or incomplete features." > release_notes.md
+            echo "" >> release_notes.md
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
+            echo "RELEASE_TITLE=CSharpSpotiLyrics $CURRENT_TAG" >> $GITHUB_ENV
+          fi
+          
+          echo "**INSTALLATION NOTICE:** Instead of downloading the zip or DLL files directly, it is highly recommended to use the official NuGet package to avoid dependency and API issues." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "You can install it using the .NET CLI:" >> release_notes.md
+          echo "\`dotnet add package CSharpSpotiLyrics\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Or visit NuGet Gallery:" >> release_notes.md
+          echo "https://www.nuget.org/packages/CSharpSpotiLyrics" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...$CURRENT_TAG" >> release_notes.md
+          else
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/$CURRENT_TAG" >> release_notes.md
+          fi
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_TITLE }}
+          body_path: release_notes.md
+          files: |
+            release_assets/*.zip
+            release_assets/*.nupkg
+          prerelease: ${{ env.IS_PRERELEASE == 'true' }}
+          make_latest: ${{ env.IS_PRERELEASE != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

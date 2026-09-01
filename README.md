@@ -1,4 +1,36 @@
-$$\large\color{green}\textbf{**Status Update (29/08/2026):** Version 2.0.1 AND 2.0.2 Release is WORKING!}$$
+> [!WARNING]
+> ### ⚠️ Canary / Pre-Release Build ⚠️
+> **Canary builds are experimental and intended for testing and early feedback.**
+> Features may be unstable, incomplete, or subject to breaking changes. Use at your own risk.
+>
+> 🚀 For production environments, please download the latest stable release (**[v2.0.2](https://github.com/s0rp/CSharpSpotiLyrics/releases/tag/v2.0.2)**).
+
+---
+
+## What's New in `2.0.3-canary.1`
+
+- **Native AOT Compilation Support:** High-efficiency cold-start execution and minimal memory footprint across all deployment targets.
+- **Full Cross-Platform Support:** Standalone, single-file native binaries for **Windows** (`x64`, `ARM64`), **Linux** (`x64`, `ARM64`), and **macOS** (`Intel`, `Apple Silicon`).
+- **Unified Multi-Target Project:** Consolidated standalone repositories into a single multi-targeting project (`.NET 8.0` + `.NET Standard 2.0`).
+- **Zero 3rd-Party Dependencies (CLI):**
+  - Replaced `taglib-sharp-netstandard2.0` with a lightweight, built-in audio metadata reader.
+  - Replaced `Redpoint.ThirdParty.System.CommandLine` with a zero-allocation native argument parser.
+- **Memory & Performance Optimizations:** Complete codebase overhaul leveraging `System.Text.Json` Source Generators for compile-time serialization.
+
+---
+
+## Known Issues & Technical Roadmap
+
+### Currently Playing Track Query (`-u current`) Failure
+- **Issue:** The `-u current` command currently fails or returns HTTP 429 (Too Many Requests).
+- **Technical Cause:** Spotify has deprecated legacy REST polling endpoint (`/v1/me/player/currently-playing`).
+- **Upcoming Architecture Migration:** Modern Spotify clients track playback state via an event-driven device synchronization protocol rather than simple REST polling:
+  1. A persistent WebSocket channel must be opened to the Spotify Dealer service (`wss://dealer.spotify.com`) to negotiate an active `X-Spotify-Connection-Id`.
+  2. A hidden virtual device state must be registered via `PUT https://spclient.wg.spotify.com/connect-state/v1/devices/hobs_{deviceId}` with `needs_full_player_state: true` to receive real-time cluster state payloads.
+- **Status:** The WebSocket Dealer gateway and Connect State client implementation are currently being integrated from internal prototypes and will land in an upcoming Canary revision to permanently restore `-u current` functionality.
+
+# Status Update (02/09/2026):** Version 2.0.1, 2.0.2, 2.0.3-* Release is WORKING!
+
 
 [![C#](https://img.shields.io/badge/Language-C%23-512BD4?style=for-the-badge&logo=csharp&logoColor=white)](https://dotnet.microsoft.com/)
 [![Framework](https://img.shields.io/badge/Framework-.NET%206.0%2B-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/download)

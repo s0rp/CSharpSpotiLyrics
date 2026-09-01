@@ -2,26 +2,13 @@
 Author : s*rp
 Purpose Of File : Client for interacting with Spotify internal and public APIs.
 Date : 24.04.2025
-Update: 23.01.2026, 28.07.2026 & 29.08.2026
+Update: 02.09.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
-- Revised 23.01.2026: 
-    - Replaced all V1 REST calls to New GraphQL
-- MINOR UPDT FROM 28.07.2026:
-    - Added Most of Graphql hashes.
-- MINOR UPDT FROM 04.08.2026:
-    - Now we're fetchin' time from api.
 - NOTE FROM 28.07.2026 : I have been running this code on my own site (https://sxrp.me) 24/7 for nearly 4-5 months on my Spot' Acc. I haven't encountered any significant issues, so feel free to use it!!!
-- REFACTORED 29.08.2026:
-    - optimizations & sec updts. (371580a83eead4c1061b0ffbbda9cb47a07bb487)
-        - Throttled concurrent HTTP requests in `GetTracksAsync` and `FetchSecretAndHashesAsync` using `SemaphoreSlim`.
-        - Added a `ConcurrentDictionary`-based reflection property cache in `RenameUsingFormat`.
-        - Configured `LoginAsync` and `GetCurrentSongAsync` to parse JSON directly from response streams.
-        - Added regex timeouts to reduce the risk of ReDoS attacks.
-        - Replaced `File.Exists` checks in `LoginAsync` with `try-catch` blocks for atomic file reads.
-        - Added conditional compilation to use the built-in `Enumerable.Chunk` on modern target frameworks.
-    - Migrated Console.WriteLine to Microsoft.Extensions.Logging.ILogger.
-    - Optimized HTTP requests and stream-based JSON parsing to reduce memory allocations.
-    - Added thread-safe parallel processing for GetTracksAsync.
+- REFACTORED 02.09.2026: 
+    - Now Fully Supports Native AOT!
+    - Removed .netstandard 2.0 project and merged into this.
+    - Added Cross - platform releases (WIP)
 
    ▄██▄                     ▄ █   █     █         ▄ ▄ ▄
  ▄██████▄     ▄ ▄       ▄   █ █ ▄ █ ▄ █ █ █   ▄   █ █ █
@@ -31,9 +18,6 @@ Supervisor : Dixiz 3A Neural (Coder MoE)
    ▀██▀                     █ █   █     █         █
 
 (this scannable actually works tho, thanks to SpotifyAsciiScannables)
-
-
-
 */
 
 using System;
@@ -48,6 +32,7 @@ using System.Net.Http.Json;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -58,83 +43,48 @@ using static CSharpSpotiLyrics.Core.Api.SpotifyTotp;
 
 namespace CSharpSpotiLyrics.Core.Api
 {
-    #region GraphQL Base Models
-    public class PersistedQuery
-    {
-        [JsonPropertyName("version")]
-        public int Version { get; set; }
-
-        [JsonPropertyName("sha256Hash")]
-        public string Sha256Hash { get; set; }
-    }
-
-    public class GraphQLExtensions
-    {
-        [JsonPropertyName("persistedQuery")]
-        public PersistedQuery PersistedQuery { get; set; }
-    }
-
-    public class GraphQLBody
-    {
-        [JsonPropertyName("operationName")]
-        public string OperationName { get; set; }
-
-        [JsonPropertyName("variables")]
-        public object Variables { get; set; }
-
-        [JsonPropertyName("extensions")]
-        public GraphQLExtensions Extensions { get; set; }
-    }
-
-    public class GraphQLResponse<T>
-    {
-        [JsonPropertyName("data")]
-        public T Data { get; set; }
-    }
-    #endregion
-
     #region GraphQL Data Models
-    public class AlbumOfTrack { public CoverArt coverArt { get; set; } public string uri { get; set; } }
-    public class Artists { public List<Item> items { get; set; } }
-    public class ArtistUnion { public string __typename { get; set; } public Goods goods { get; set; } public object headerImage { get; set; } public string id { get; set; } public Profile profile { get; set; } public Stats stats { get; set; } public string uri { get; set; } public Visuals visuals { get; set; } }
-    public class AssociationsV3 { public AudioAssociations audioAssociations { get; set; } }
-    public class AudioAssociations { public List<Item> items { get; set; } }
-    public class AvatarImage { public List<Source> sources { get; set; } }
-    public class Biography { public string text { get; set; } public string type { get; set; } }
-    public class Canvas { public string fileId { get; set; } public string type { get; set; } public string uri { get; set; } public string url { get; set; } }
-    public class ColorDark { public string hex { get; set; } }
-    public class Concerts { public List<Item> items { get; set; } public int? totalCount { get; set; } }
-    public class ContentRating { public string label { get; set; } }
-    public class Contributors { public List<Item> items { get; set; } }
-    public class CoverArt { public ExtractedColors extractedColors { get; set; } public List<Source> sources { get; set; } }
-    public class Credit { public string __typename { get; set; } public string artistName { get; set; } public string artistUri { get; set; } public bool? isArtistUriLinkable { get; set; } public string role { get; set; } }
-    public class CreditsTrait { public Contributors contributors { get; set; } public object sources { get; set; } }
-    public class Data { public ArtistUnion artistUnion { get; set; } public TrackUnion trackUnion { get; set; } public string __typename { get; set; } public Artists artists { get; set; } public bool? festival { get; set; } public Location location { get; set; } public string startDateIsoString { get; set; } public string title { get; set; } public string uri { get; set; } public string id { get; set; } public Profile profile { get; set; } public List<Source> sources { get; set; } public AlbumOfTrack albumOfTrack { get; set; } public AssociationsV3 associationsV3 { get; set; } public ContentRating contentRating { get; set; } public string name { get; set; } }
-    public class ExternalLinks { public List<Item> items { get; set; } }
-    public class ExtractedColors { public ColorDark colorDark { get; set; } }
-    public class Gallery { public List<Item> items { get; set; } }
-    public class Goods { public Concerts concerts { get; set; } }
-    public class CanvasJSON { public Data data { get; set; } }
-    public class Item { public Data data { get; set; } public TrackAudio trackAudio { get; set; } public string name { get; set; } public string url { get; set; } public string city { get; set; } public string country { get; set; } public int? numberOfListeners { get; set; } public string region { get; set; } public List<Source> sources { get; set; } public string role { get; set; } public RoleGroup roleGroup { get; set; } public string uri { get; set; } public string __typename { get; set; } public TrackOfVideo trackOfVideo { get; set; } public Profile profile { get; set; } }
-    public class Location { public string city { get; set; } public string name { get; set; } }
-    public class Merch { public List<object> items { get; set; } public int? totalCount { get; set; } }
-    public class Profile { public string name { get; set; } public Biography biography { get; set; } public ExternalLinks externalLinks { get; set; } public bool? verified { get; set; } }
-    public class RelatedVideos { public string __typename { get; set; } public List<Item> items { get; set; } public int? totalCount { get; set; } }
-    public class RoleGroup { public string name { get; set; } }
-    public class Root { public Data data { get; set; } }
-    public class Source { public int? maxHeight { get; set; } public int? maxWidth { get; set; } public string url { get; set; } public int? height { get; set; } public int? width { get; set; } public List<Item> items { get; set; } }
-    public class Stats { public int? followers { get; set; } public int? monthlyListeners { get; set; } public TopCities topCities { get; set; } public int? worldRank { get; set; } }
-    public class TopCities { public List<Item> items { get; set; } }
-    public class TrackAudio { public string _uri { get; set; } }
-    public class TrackOfVideo { public string __typename { get; set; } public string _uri { get; set; } public Data data { get; set; } }
-    public class TrackUnion { public string __typename { get; set; } public AssociationsV3 associationsV3 { get; set; } public Canvas canvas { get; set; } public List<Credit> credits { get; set; } public CreditsTrait creditsTrait { get; set; } public Merch merch { get; set; } public RelatedVideos relatedVideos { get; set; } }
-    public class Visuals { public AvatarImage avatarImage { get; set; } public Gallery gallery { get; set; } }
+    public class AlbumOfTrackGraph { public CoverArt? coverArt { get; set; } public string? uri { get; set; } }
+    public class Artists { public List<Item>? items { get; set; } }
+    public class ArtistUnion { public string? __typename { get; set; } public Goods? goods { get; set; } public JsonElement? headerImage { get; set; } public string? id { get; set; } public Profile? profile { get; set; } public Stats? stats { get; set; } public string? uri { get; set; } public Visuals? visuals { get; set; } }
+    public class AssociationsV3 { public AudioAssociations? audioAssociations { get; set; } }
+    public class AudioAssociations { public List<Item>? items { get; set; } }
+    public class AvatarImage { public List<Source>? sources { get; set; } }
+    public class Biography { public string? text { get; set; } public string? type { get; set; } }
+    public class Canvas { public string? fileId { get; set; } public string? type { get; set; } public string? uri { get; set; } public string? url { get; set; } }
+    public class ColorDark { public string? hex { get; set; } }
+    public class Concerts { public List<Item>? items { get; set; } public int? totalCount { get; set; } }
+    public class ContentRatingGraph { public string? label { get; set; } }
+    public class Contributors { public List<Item>? items { get; set; } }
+    public class CoverArt { public ExtractedColors? extractedColors { get; set; } public List<Source>? sources { get; set; } }
+    public class Credit { public string? __typename { get; set; } public string? artistName { get; set; } public string? artistUri { get; set; } public bool? isArtistUriLinkable { get; set; } public string? role { get; set; } }
+    public class CreditsTrait { public Contributors? contributors { get; set; } public JsonElement? sources { get; set; } }
+    public class Data { public ArtistUnion? artistUnion { get; set; } public TrackUnion? trackUnion { get; set; } public string? __typename { get; set; } public Artists? artists { get; set; } public bool? festival { get; set; } public Location? location { get; set; } public string? startDateIsoString { get; set; } public string? title { get; set; } public string? uri { get; set; } public string? id { get; set; } public Profile? profile { get; set; } public List<Source>? sources { get; set; } public AlbumOfTrackGraph? albumOfTrack { get; set; } public AssociationsV3? associationsV3 { get; set; } public ContentRatingGraph? contentRating { get; set; } public string? name { get; set; } }
+    public class ExternalLinks { public List<Item>? items { get; set; } }
+    public class ExtractedColors { public ColorDark? colorDark { get; set; } }
+    public class Gallery { public List<Item>? items { get; set; } }
+    public class Goods { public Concerts? concerts { get; set; } }
+    public class CanvasJSON { public Data? data { get; set; } }
+    public class Item { public Data? data { get; set; } public TrackAudio? trackAudio { get; set; } public string? name { get; set; } public string? url { get; set; } public string? city { get; set; } public string? country { get; set; } public int? numberOfListeners { get; set; } public string? region { get; set; } public List<Source>? sources { get; set; } public string? role { get; set; } public RoleGroup? roleGroup { get; set; } public string? uri { get; set; } public string? __typename { get; set; } public TrackOfVideo? trackOfVideo { get; set; } public Profile? profile { get; set; } }
+    public class Location { public string? city { get; set; } public string? name { get; set; } }
+    public class Merch { public List<JsonElement>? items { get; set; } public int? totalCount { get; set; } }
+    public class Profile { public string? name { get; set; } public Biography? biography { get; set; } public ExternalLinks? externalLinks { get; set; } public bool? verified { get; set; } }
+    public class RelatedVideos { public string? __typename { get; set; } public List<Item>? items { get; set; } public int? totalCount { get; set; } }
+    public class RoleGroup { public string? name { get; set; } }
+    public class Root { public Data? data { get; set; } }
+    public class Source { public int? maxHeight { get; set; } public int? maxWidth { get; set; } public string? url { get; set; } public int? height { get; set; } public int? width { get; set; } public List<Item>? items { get; set; } }
+    public class Stats { public int? followers { get; set; } public int? monthlyListeners { get; set; } public TopCities? topCities { get; set; } public int? worldRank { get; set; } }
+    public class TopCities { public List<Item>? items { get; set; } }
+    public class TrackAudio { public string? _uri { get; set; } }
+    public class TrackOfVideo { public string? __typename { get; set; } public string? _uri { get; set; } public Data? data { get; set; } }
+    public class TrackUnion { public string? __typename { get; set; } public AssociationsV3? associationsV3 { get; set; } public Canvas? canvas { get; set; } public List<Credit>? credits { get; set; } public CreditsTrait? creditsTrait { get; set; } public Merch? merch { get; set; } public RelatedVideos? relatedVideos { get; set; } }
+    public class Visuals { public AvatarImage? avatarImage { get; set; } public Gallery? gallery { get; set; } }
 
     public class CustomArtistDetails
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string ImageUrl { get; set; }
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? ImageUrl { get; set; }
     }
     #endregion
 
@@ -172,12 +122,6 @@ namespace CSharpSpotiLyrics.Core.Api
         private bool _TotpCached = false;
         private DateTime _clientTokenExpiresAt = DateTime.MinValue;
 
-        private readonly JsonSerializerOptions _jsonOptions = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-
         public SpotifyClient(string spDcToken, ILogger<SpotifyClient>? logger = null)
         {
             if (string.IsNullOrWhiteSpace(spDcToken))
@@ -198,7 +142,9 @@ namespace CSharpSpotiLyrics.Core.Api
             };
 
             _httpClient = new HttpClient(handler);
+#if NETCOREAPP || NET5_0_OR_GREATER || NET8_0_OR_GREATER
             _httpClient.DefaultRequestVersion = HttpVersion.Version20;
+#endif
             _httpClient.DefaultRequestHeaders.ExpectContinue = false;
 
             _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
@@ -364,7 +310,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
                         if (!string.IsNullOrEmpty(jsonContent))
                         {
-                            Dictionary<string, string>? loadedHashes = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
+                            Dictionary<string, string>? loadedHashes = JsonHelper.Deserialize(jsonContent, SpotiLyricsJsonContext.Default.DictionaryStringString);
                             _logger?.LogInformation("{HashCount} Hash(es) Loaded From .SPOTIFYHASH", loadedHashes?.Count);
 
                             if (loadedHashes != null && loadedHashes.Count > 0)
@@ -405,25 +351,25 @@ namespace CSharpSpotiLyrics.Core.Api
             {
                 _logger?.LogInformation("Fetching Client Token...");
 
-                var payloadObj = new
+                var payloadObj = new JsonObject
                 {
-                    client_data = new
+                    ["client_data"] = new JsonObject
                     {
-                        client_version = WebPlayerClientVersion,
-                        client_id = _clientId,
-                        js_sdk_data = new
+                        ["client_version"] = WebPlayerClientVersion,
+                        ["client_id"] = _clientId,
+                        ["js_sdk_data"] = new JsonObject
                         {
-                            device_brand = "unknown",
-                            device_model = "unknown",
-                            os = "windows",
-                            os_version = "NT 10.0",
-                            device_id = GenerateRandomHex(32),
-                            device_type = "computer"
+                            ["device_brand"] = "unknown",
+                            ["device_model"] = "unknown",
+                            ["os"] = "windows",
+                            ["os_version"] = "NT 10.0",
+                            ["device_id"] = GenerateRandomHex(32),
+                            ["device_type"] = "computer"
                         }
                     }
                 };
 
-                string jsonPayload = JsonSerializer.Serialize(payloadObj);
+                string jsonPayload = payloadObj.ToJsonString();
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, ClientTokenUrl);
                 var content = new StringContent(jsonPayload, Encoding.UTF8);
@@ -485,26 +431,30 @@ namespace CSharpSpotiLyrics.Core.Api
             return OperationToHashTable.TryGetValue(operationName, out string hash) ? hash : fallbackHash;
         }
 
-        private async Task<T> SendPathfinderRequest<T>(GraphQLBody body, string version = "v2")
+#if NET8_0_OR_GREATER
+        private async Task<T> SendPathfinderRequest<T>(GraphQLBody body, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo, string version = "v2")
+#else
+        private async Task<T> SendPathfinderRequest<T>(GraphQLBody body, JsonTypeInfo<T> typeInfo, string version = "v2")
+#endif
         {
             await EnsureLoggedInAsync();
             string url = $"https://api-partner.spotify.com/pathfinder/{version}/query";
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            string jsonPayload = JsonSerializer.Serialize(body, _jsonOptions);
+            string jsonPayload = JsonHelper.Serialize(body, SpotiLyricsJsonContext.Default.GraphQLBody);
 
             var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-            content.Headers.ContentType.CharSet = "UTF-8";
+            content.Headers.ContentType!.CharSet = "UTF-8";
             request.Content = content;
 
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
-            return await response.Content.ReadFromJsonAsync<T>(_jsonOptions);
+            return (await JsonHelper.ReadFromJsonAsync(response.Content, typeInfo))!;
         }
 
         // ----------------------------------------------------
-        // RAW GRAPHQL ENDPOINTS (Returns JsonElement)
+        // RAW GRAPHQL ENDPOINTS
         // ----------------------------------------------------
 
         public async Task<JsonElement> GetLibraryV3RawAsync(string folderUri, int limit = 50, int offset = 0)
@@ -513,10 +463,29 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "libraryV3",
-                Variables = new { filters = new string[] { }, order = (string)null, textFilter = "", features = new[] { "LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "PRERELEASES_V2", "CLIPS", "EVENTS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new string[] { }, folderUri = folderUri, includeFoldersWhenFlattening = true },
+                Variables = new JsonObject
+                {
+                    ["filters"] = new JsonArray(),
+                    ["order"] = null,
+                    ["textFilter"] = "",
+                    ["features"] = new JsonArray(
+                        JsonValue.Create("LIKED_SONGS"),
+                        JsonValue.Create("YOUR_EPISODES_V2"),
+                        JsonValue.Create("PRERELEASES"),
+                        JsonValue.Create("PRERELEASES_V2"),
+                        JsonValue.Create("CLIPS"),
+                        JsonValue.Create("EVENTS")
+                    ),
+                    ["limit"] = limit,
+                    ["offset"] = offset,
+                    ["flatten"] = false,
+                    ["expandedFolders"] = new JsonArray(),
+                    ["folderUri"] = folderUri,
+                    ["includeFoldersWhenFlattening"] = true
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> FetchPlaylistMetadataRawAsync(string playlistUri, int limit = 100, int offset = 0)
@@ -525,10 +494,16 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "fetchPlaylistMetadata",
-                Variables = new { uri = playlistUri, offset = offset, limit = limit, enableWatchFeedEntrypoint = true },
+                Variables = new JsonObject
+                {
+                    ["uri"] = playlistUri,
+                    ["offset"] = offset,
+                    ["limit"] = limit,
+                    ["enableWatchFeedEntrypoint"] = true
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchPlaylistMetadata", "e4b2953f160e58e38ac025d79b5a9b3aceee5c4c716598e9830bfceb69faff5f") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> QueryAlbumMerchAsync(string albumUri, string deviceId)
@@ -537,10 +512,21 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "queryAlbumMerch",
-                Variables = new { uri = albumUri, deviceInfo = new { deviceId = deviceId, deviceType = "computer", clientId = _clientId, clientVersion = WebPlayerClientVersion, productId = "1" } },
+                Variables = new JsonObject
+                {
+                    ["uri"] = albumUri,
+                    ["deviceInfo"] = new JsonObject
+                    {
+                        ["deviceId"] = deviceId,
+                        ["deviceType"] = "computer",
+                        ["clientId"] = _clientId,
+                        ["clientVersion"] = WebPlayerClientVersion,
+                        ["productId"] = "1"
+                    }
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryAlbumMerch", "3ef44ed6f17be67299538fe77faffab4075aeaf9e1085f10fc835592266711b5") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> AreEntitiesInLibraryAsync(List<string> uris)
@@ -549,10 +535,13 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "areEntitiesInLibrary",
-                Variables = new { uris = uris },
+                Variables = new JsonObject
+                {
+                    ["uris"] = new JsonArray(uris.Select(u => JsonValue.Create(u)).ToArray())
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("areEntitiesInLibrary", "134337999233cc6fdd6b1e6dbf94841409f04a946c5c7b744b09ba0dfe5a85ed") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> IsCuratedAsync(List<string> uris)
@@ -561,10 +550,13 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "isCurated",
-                Variables = new { uris = uris },
+                Variables = new JsonObject
+                {
+                    ["uris"] = new JsonArray(uris.Select(u => JsonValue.Create(u)).ToArray())
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("isCurated", "e4ed1f91a2cc5415befedb85acf8671dc1a4bf3ca1a5b945a6386101a22e28a6") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> GetCentralisedStatePlayerOptionsAsync(string albumUri, string deviceId)
@@ -573,10 +565,21 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "centralisedStatePlayerOptions",
-                Variables = new { uri = albumUri, deviceInfo = new { deviceId = deviceId, deviceType = "computer", clientId = _clientId, clientVersion = WebPlayerClientVersion, productId = "1" } },
+                Variables = new JsonObject
+                {
+                    ["uri"] = albumUri,
+                    ["deviceInfo"] = new JsonObject
+                    {
+                        ["deviceId"] = deviceId,
+                        ["deviceType"] = "computer",
+                        ["clientId"] = _clientId,
+                        ["clientVersion"] = WebPlayerClientVersion,
+                        ["productId"] = "1"
+                    }
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("centralisedStatePlayerOptions", "e2dcfcab470854d4d1c7cb1a851438f14fe0a94d57db7f0b9dde492559d5395d") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> DecorateContextTracksAsync(List<string> uris)
@@ -585,10 +588,13 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "decorateContextTracks",
-                Variables = new { uris = uris },
+                Variables = new JsonObject
+                {
+                    ["uris"] = new JsonArray(uris.Select(u => JsonValue.Create(u)).ToArray())
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("decorateContextTracks", "383de00240775c39a6afe0b1055dc562b2a3930894201f9762f3fc32a74971c7") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         public async Task<JsonElement> FetchEntitiesForRecentlyPlayedAsync(List<string> uris)
@@ -597,10 +603,13 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "fetchEntitiesForRecentlyPlayed",
-                Variables = new { uris = uris },
+                Variables = new JsonObject
+                {
+                    ["uris"] = new JsonArray(uris.Select(u => JsonValue.Create(u)).ToArray())
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchEntitiesForRecentlyPlayed", "cf5d2e94ffd82788470788ae1f6090cc3e9e774fb8fd383580634c6e6f50f7be") } }
             };
-            return await SendPathfinderRequest<JsonElement>(body);
+            return await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
         }
 
         // ----------------------------------------------------
@@ -618,12 +627,20 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "queryNpvArtist",
-                Variables = new { artistUri = artistIdOrUri, trackUri = trackIdOrUri, contributorsLimit = 10, contributorsOffset = 0, enableRelatedVideos = true, enableRelatedAudioTracks = false },
+                Variables = new JsonObject
+                {
+                    ["artistUri"] = artistIdOrUri,
+                    ["trackUri"] = trackIdOrUri,
+                    ["contributorsLimit"] = 10,
+                    ["contributorsOffset"] = 0,
+                    ["enableRelatedVideos"] = true,
+                    ["enableRelatedAudioTracks"] = false
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryNpvArtist", "047c9c225967d41a763949a4db3f0493e901c9f8689a6537408aabf9beffc177") } }
             };
 
-            var result = await SendPathfinderRequest<GraphQLResponse<Data>>(body);
-            if (result.Data?.trackUnion?.canvas != null && !string.IsNullOrEmpty(result.Data.trackUnion.canvas.url) && result.Data.trackUnion.canvas.url.EndsWith(".mp4"))
+            var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponseData);
+            if (result?.Data?.trackUnion?.canvas != null && !string.IsNullOrEmpty(result.Data.trackUnion.canvas.url) && result.Data.trackUnion.canvas.url.EndsWith(".mp4"))
             {
                 _logger?.LogInformation("Canvas URL found.");
                 return result.Data?.trackUnion?.canvas.url;
@@ -646,21 +663,29 @@ namespace CSharpSpotiLyrics.Core.Api
             var body = new GraphQLBody
             {
                 OperationName = "queryNpvArtist",
-                Variables = new { artistUri = artistUri, trackUri = "", contributorsLimit = 1, contributorsOffset = 0, enableRelatedVideos = false, enableRelatedAudioTracks = false },
+                Variables = new JsonObject
+                {
+                    ["artistUri"] = artistUri,
+                    ["trackUri"] = "",
+                    ["contributorsLimit"] = 1,
+                    ["contributorsOffset"] = 0,
+                    ["enableRelatedVideos"] = false,
+                    ["enableRelatedAudioTracks"] = false
+                },
                 Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("queryNpvArtist", "047c9c225967d41a763949a4db3f0493e901c9f8689a6537408aabf9beffc177") } }
             };
 
             try
             {
-                var result = await SendPathfinderRequest<JsonElement>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.JsonElement);
 
                 var profile = result.GetProperty("data").GetProperty("artistUnion").GetProperty("profile");
-                string name = profile.GetProperty("name").GetString();
+                string? name = profile.GetProperty("name").GetString();
 
                 var visuals = result.GetProperty("data").GetProperty("artistUnion").GetProperty("visuals");
-                string imageUrl = visuals.GetProperty("avatarImage").GetProperty("sources")[0].GetProperty("url").GetString();
+                string? imageUrl = visuals.GetProperty("avatarImage").GetProperty("sources")[0].GetProperty("url").GetString();
 
-                return new CustomArtistDetails { Id = safeArtistId, Name = name, ImageUrl = imageUrl };
+                return new CustomArtistDetails { Id = safeArtistId, Name = name ?? "", ImageUrl = imageUrl ?? "" };
             }
             catch (Exception ex)
             {
@@ -678,18 +703,18 @@ namespace CSharpSpotiLyrics.Core.Api
                 var body = new GraphQLBody
                 {
                     OperationName = "profileAttributes",
-                    Variables = new { },
+                    Variables = new JsonObject { },
                     Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("profileAttributes", "53bcb064f6cd18c23f752bc324a791194d20df612d8e1239c735144ab0399ced") } }
                 };
 
-                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponseMeData);
 
                 if (result?.Data?.Me == null) return null;
 
                 return new SpotifyUser
                 {
-                    Id = result.Data.Me.Profile.Username,
-                    DisplayName = result.Data.Me.Profile.Name,
+                    Id = result.Data.Me.Profile?.Username,
+                    DisplayName = result.Data.Me.Profile?.Name,
                     Country = "N/A",
                     Product = "N/A"
                 };
@@ -711,11 +736,17 @@ namespace CSharpSpotiLyrics.Core.Api
                 var body = new GraphQLBody
                 {
                     OperationName = "fetchPlaylistMetadata",
-                    Variables = new { uri = $"spotify:playlist:{playlistId}", offset = 0, limit = 100, enableWatchFeedEntrypoint = true },
+                    Variables = new JsonObject
+                    {
+                        ["uri"] = $"spotify:playlist:{playlistId}",
+                        ["offset"] = 0,
+                        ["limit"] = 100,
+                        ["enableWatchFeedEntrypoint"] = true
+                    },
                     Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("fetchPlaylistMetadata", "e4b2953f160e58e38ac025d79b5a9b3aceee5c4c716598e9830bfceb69faff5f") } }
                 };
 
-                var result = await SendPathfinderRequest<GraphQLResponse<PlaylistData>>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponsePlaylistData);
                 var plData = result?.Data?.PlaylistV2;
 
                 if (plData == null) return null;
@@ -725,9 +756,9 @@ namespace CSharpSpotiLyrics.Core.Api
                     Name = plData.Name,
                     Description = plData.Description,
                     Uri = plData.Uri,
-                    Owner = new SpotifyUser { DisplayName = plData.OwnerV2.Data.Name, Id = plData.OwnerV2.Data.Username },
+                    Owner = new SpotifyUser { DisplayName = plData.OwnerV2?.Data?.Name, Id = plData.OwnerV2?.Data?.Username },
                     Images = new List<ImageObject>(),
-                    Tracks = new PagingObject<PlaylistItem> { Items = new List<PlaylistItem>(), Total = plData.Content.TotalCount }
+                    Tracks = new PagingObject<PlaylistItem> { Items = new List<PlaylistItem>(), Total = plData.Content?.TotalCount ?? 0 }
                 };
 
                 if (plData.Images?.Items != null)
@@ -748,12 +779,14 @@ namespace CSharpSpotiLyrics.Core.Api
                 {
                     foreach (var item in plData.Content.Items)
                     {
-                        var trackData = item.ItemV2.Data;
+                        var trackData = item.ItemV2?.Data;
+                        if (trackData == null) continue;
+
                         var track = new SpotifyTrack
                         {
                             Name = trackData.Name,
                             Uri = trackData.Uri,
-                            DurationMs = trackData.TrackDuration.TotalMilliseconds,
+                            DurationMs = trackData.TrackDuration?.TotalMilliseconds ?? 0,
                             Artists = new List<SimpleArtistObject>(),
                             Album = null
                         };
@@ -767,11 +800,11 @@ namespace CSharpSpotiLyrics.Core.Api
                         {
                             foreach (var art in trackData.Artists.Items)
                             {
-                                track.Artists.Add(new SimpleArtistObject { Name = art.Profile.Name, Uri = art.Uri });
+                                track.Artists.Add(new SimpleArtistObject { Name = art.Profile?.Name, Uri = art.Uri });
                             }
                         }
 
-                        playlist.Tracks.Items.Add(new PlaylistItem { Track = track });
+                        playlist.Tracks!.Items!.Add(new PlaylistItem { Track = track });
                     }
                 }
 
@@ -789,7 +822,7 @@ namespace CSharpSpotiLyrics.Core.Api
             var ids = new List<string>();
             if (pl?.Tracks?.Items != null)
             {
-                ids.AddRange(pl.Tracks.Items.Select(i => i.Track.Id).Where(id => !string.IsNullOrEmpty(id)));
+                ids.AddRange(pl.Tracks.Items.Select(i => i.Track?.Id).Where(id => !string.IsNullOrEmpty(id))!);
             }
             return ids;
         }
@@ -803,11 +836,27 @@ namespace CSharpSpotiLyrics.Core.Api
                 var body = new GraphQLBody
                 {
                     OperationName = "libraryV3",
-                    Variables = new { order = (object)null, textFilter = "", features = new[] { "LIKED_SONGS", "YOUR_EPISODES_V2", "PRERELEASES", "EVENTS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new object[] { }, folderUri = (object)null, includeFoldersWhenFlattening = true },
+                    Variables = new JsonObject
+                    {
+                        ["order"] = null,
+                        ["textFilter"] = "",
+                        ["features"] = new JsonArray(
+                            JsonValue.Create("LIKED_SONGS"),
+                            JsonValue.Create("YOUR_EPISODES_V2"),
+                            JsonValue.Create("PRERELEASES"),
+                            JsonValue.Create("EVENTS")
+                        ),
+                        ["limit"] = limit,
+                        ["offset"] = offset,
+                        ["flatten"] = false,
+                        ["expandedFolders"] = new JsonArray(),
+                        ["folderUri"] = null,
+                        ["includeFoldersWhenFlattening"] = true
+                    },
                     Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
                 };
 
-                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponseMeData);
                 var libItems = result?.Data?.Me?.LibraryV3?.Items;
 
                 if (libItems == null) return new PagingObject<SimplePlaylistObject> { Items = new List<SimplePlaylistObject>() };
@@ -815,7 +864,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 var playlists = new List<SimplePlaylistObject>();
                 foreach (var item in libItems)
                 {
-                    if (item.Item?.Data != null && item.Item.Data.Uri.Contains(":playlist"))
+                    if (item.Item?.Data != null && item.Item.Data.Uri != null && item.Item.Data.Uri.Contains(":playlist"))
                     {
                         var plData = item.Item.Data;
                         var simplePl = new SimplePlaylistObject
@@ -861,11 +910,17 @@ namespace CSharpSpotiLyrics.Core.Api
                 var body = new GraphQLBody
                 {
                     OperationName = "getAlbum",
-                    Variables = new { uri = $"spotify:album:{albumId}", locale = "", offset = 0, limit = 50 },
+                    Variables = new JsonObject
+                    {
+                        ["uri"] = $"spotify:album:{albumId}",
+                        ["locale"] = "",
+                        ["offset"] = 0,
+                        ["limit"] = 50
+                    },
                     Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("getAlbum", "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10") } }
                 };
 
-                var result = await SendPathfinderRequest<GraphQLResponse<AlbumData>>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponseAlbumData);
                 var albData = result?.Data?.AlbumUnion;
 
                 if (albData == null) return null;
@@ -967,7 +1022,7 @@ namespace CSharpSpotiLyrics.Core.Api
                             }
                         }
 
-                        album.Tracks.Items.Add(track);
+                        album.Tracks!.Items!.Add(track);
                     }
                 }
 
@@ -985,7 +1040,7 @@ namespace CSharpSpotiLyrics.Core.Api
             var ids = new List<string>();
             if (album?.Tracks?.Items != null)
             {
-                ids.AddRange(album.Tracks.Items.Select(t => t.Id).Where(id => !string.IsNullOrEmpty(id)));
+                ids.AddRange(album.Tracks.Items.Select(t => t.Id).Where(id => !string.IsNullOrEmpty(id))!);
             }
             return ids;
         }
@@ -1006,11 +1061,24 @@ namespace CSharpSpotiLyrics.Core.Api
                 var body = new GraphQLBody
                 {
                     OperationName = "libraryV3",
-                    Variables = new { order = (object)null, textFilter = "", features = new[] { "ALBUMS" }, limit = limit, offset = offset, flatten = false, expandedFolders = new object[] { }, folderUri = (object)null, includeFoldersWhenFlattening = true },
+                    Variables = new JsonObject
+                    {
+                        ["order"] = null,
+                        ["textFilter"] = "",
+                        ["features"] = new JsonArray(
+                            JsonValue.Create("ALBUMS")
+                        ),
+                        ["limit"] = limit,
+                        ["offset"] = offset,
+                        ["flatten"] = false,
+                        ["expandedFolders"] = new JsonArray(),
+                        ["folderUri"] = null,
+                        ["includeFoldersWhenFlattening"] = true
+                    },
                     Extensions = new GraphQLExtensions { PersistedQuery = new PersistedQuery { Version = 1, Sha256Hash = GetHash("libraryV3", "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455") } }
                 };
 
-                var result = await SendPathfinderRequest<GraphQLResponse<MeData>>(body);
+                var result = await SendPathfinderRequest(body, SpotiLyricsJsonContext.Default.GraphQLResponseMeData);
                 var items = result?.Data?.Me?.LibraryV3?.Items;
 
                 var savedAlbums = new List<SavedAlbumObject>();
@@ -1019,7 +1087,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 {
                     foreach (var item in items)
                     {
-                        if (item.Item?.Data != null && item.Item.Data.Uri.Contains(":album"))
+                        if (item.Item?.Data != null && item.Item.Data.Uri != null && item.Item.Data.Uri.Contains(":album"))
                         {
                             var data = item.Item.Data;
                             var album = new SpotifyAlbum { Name = data.Name, Uri = data.Uri, Images = new List<ImageObject>() };
@@ -1081,7 +1149,7 @@ namespace CSharpSpotiLyrics.Core.Api
                         return;
                     }
 
-                    var metadata = await response.Content.ReadFromJsonAsync<MetadataTrackResponse>(_jsonOptions);
+                    var metadata = await JsonHelper.ReadFromJsonAsync(response.Content, SpotiLyricsJsonContext.Default.MetadataTrackResponse);
                     if (metadata != null)
                     {
                         spotifyTracks.Add(MapMetadataToSpotifyTrack(metadata, trackId));
@@ -1099,7 +1167,7 @@ namespace CSharpSpotiLyrics.Core.Api
 
             await Task.WhenAll(tasks);
 
-            return new TracksResponse { Tracks = spotifyTracks.ToList() };
+            return new TracksResponse { Tracks = spotifyTracks.ToList()! };
         }
 
         private SpotifyTrack MapMetadataToSpotifyTrack(MetadataTrackResponse meta, string originalId)
@@ -1126,7 +1194,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 foreach (var img in meta.Album.CoverGroup.Image)
                 {
                     if (!string.IsNullOrEmpty(img.FileId))
-                        track.Album.Images.Add(new ImageObject { Url = $"https://i.scdn.co/image/{img.FileId}", Width = img.Width, Height = img.Height });
+                        track.Album.Images!.Add(new ImageObject { Url = $"https://i.scdn.co/image/{img.FileId}", Width = img.Width, Height = img.Height });
                 }
             }
 
@@ -1149,7 +1217,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 using var stream = await response.Content.ReadAsStreamAsync();
                 if (stream.Length == 0) return null;
 
-                return await JsonSerializer.DeserializeAsync<CurrentlyPlayingContext>(stream, _jsonOptions);
+                return await JsonHelper.DeserializeAsync(stream, SpotiLyricsJsonContext.Default.CurrentlyPlayingContext);
             }
             catch (Exception ex)
             {
@@ -1179,7 +1247,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 response.EnsureSuccessStatusCode();
 
                 using var stream = await response.Content.ReadAsStreamAsync();
-                return await JsonSerializer.DeserializeAsync<LyricsResponse>(stream, _jsonOptions);
+                return await JsonHelper.DeserializeAsync(stream, SpotiLyricsJsonContext.Default.LyricsResponse);
             }
             catch (Exception ex)
             {

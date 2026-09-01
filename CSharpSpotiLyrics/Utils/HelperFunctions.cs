@@ -4,12 +4,15 @@ Purpose Of File : Utility functions for string manipulation and file system oper
 Date : 24.04.2025
 Supervisor : Dixiz 3A Neural (Coder MoE)
 */
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
-using CSharpSpotiLyrics.Core.Models; // Assuming TrackInfo model exists here or nearby
+using CSharpSpotiLyrics.Core.Models;
 
 namespace CSharpSpotiLyrics.Core.Utils
 {
-    // Temporary placeholder model - define this properly based on required fields
     public class TrackInfoPlaceholder
     {
         public string? Name { get; set; }
@@ -26,119 +29,99 @@ namespace CSharpSpotiLyrics.Core.Utils
 
     public static class HelperFunctions
     {
-
-        private static readonly Regex InvalidFileCharsRegex = new(
+        private static readonly Regex InvalidFileCharsRegex = new Regex(
             $"[{Regex.Escape(new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars()))}]",
             RegexOptions.Compiled
         );
-        private static readonly Regex FormatRegex = new(@"\{(.+?)\}", RegexOptions.Compiled);
+        private static readonly Regex FormatRegex = new Regex(@"\{(.+?)\}", RegexOptions.Compiled);
 
         public static string SanitizeFileName(string fileName)
         {
             if (string.IsNullOrWhiteSpace(fileName))
-                return "_"; // Default for empty/null
-            // Replace invalid chars with underscore, trim result
+                return "_";
             return InvalidFileCharsRegex.Replace(fileName, "_").Trim();
         }
 
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, System.Reflection.PropertyInfo> _propertyCache = new();
-
         public static string RenameUsingFormat(string formatString, TrackInfoPlaceholder data)
         {
-            // Use Regex.Replace with a MatchEvaluator for robust replacement
             string result = FormatRegex.Replace(
                 formatString,
                 match =>
                 {
                     string key = match.Groups[1].Value;
-
-                    if (!_propertyCache.TryGetValue(key, out var prop)) //Cpu intensive operation, so caching is used.
+                    string? value = key.ToLowerInvariant() switch
                     {
-                        prop = data.GetType().GetProperty(
-                            key,
-                            System.Reflection.BindingFlags.IgnoreCase
-                                | System.Reflection.BindingFlags.Public
-                                | System.Reflection.BindingFlags.Instance
-                        );
-
-                        if (prop != null)
-                        {
-                            _propertyCache[key] = prop;
-                        }
-                    }
-
-                    object? value = prop?.GetValue(data);
-                    // Handle different property types gracefully
-
-                    return value switch
-                    {
-                        null => "", // Replace with empty string if property not found or null
-                        string s => s,
-                        // Add other type conversions if needed (e.g., numbers to strings)
-                        _ => value.ToString() ?? "",
+                        "name" => data.Name,
+                        "artist" => data.Artist,
+                        "albumname" => data.AlbumName,
+                        "albumartist" => data.AlbumArtist,
+                        "tracknumber" => data.TrackNumber,
+                        "totaltracks" => data.TotalTracks,
+                        "releasedate" => data.ReleaseDate,
+                        "explicit" => data.Explicit,
+                        "owner" => data.Owner,
+                        "collaborative" => data.Collaborative,
+                        _ => ""
                     };
+                    return value ?? "";
                 }
             );
 
-            // Sanitize the final result for FS compatibility
             return SanitizeFileName(result);
         }
 
-        // Overload for Album/Playlist data (using Dictionary or a specific model)
-        public static string RenameUsingFormat(string formatString, Dictionary<string, object> data)
+        public static string RenameUsingFormat(string formatString, Dictionary<string, string> data)
         {
             string result = FormatRegex.Replace(
                 formatString,
                 match =>
                 {
                     string key = match.Groups[1].Value;
-                    if (data.TryGetValue(key, out object? value) && value != null)
+                    if (data.TryGetValue(key, out string? value) && value != null)
                     {
-                        return value.ToString() ?? "";
+                        return value;
                     }
-                    return ""; // Key not found or value is null
+                    return "";
                 }
             );
             return SanitizeFileName(result);
         }
 
 
-        // Helper to prepare placeholder data from SpotifyTrack
         public static TrackInfoPlaceholder SanitizeTrackData(SpotifyTrack track)
         {
             return new TrackInfoPlaceholder
             {
                 Name = track.Name,
                 Artist = string.Join(
-                    ',',
+                    ",",
                     track.Artists?.Select(a => a.Name) ?? Enumerable.Empty<string>()
                 ),
                 AlbumName = track.Album?.Name,
                 AlbumArtist = string.Join(
-                    ',',
+                    ",",
                     track.Album?.Artists?.Select(a => a.Name) ?? Enumerable.Empty<string>()
                 ),
-                TrackNumber = track.TrackNumber.ToString("D2"), // Pad with zero if needed
-                TotalTracks = track.Album?.TotalTracks.ToString("D2"), // Pad with zero if needed
+                TrackNumber = track.TrackNumber.ToString("D2"),
+                TotalTracks = track.Album?.TotalTracks.ToString("D2"),
                 ReleaseDate = track.Album?.ReleaseDate,
                 Explicit = track.Explicit ? "[E]" : "",
             };
         }
 
-        // Helper to chunk lists
         public static IEnumerable<IEnumerable<T>> Chunk<T>(IEnumerable<T> source, int chunkSize)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize));
 
-            #if NET6_0_OR_GREATER
-                        return System.Linq.Enumerable.Chunk(source, chunkSize);
-            #else
-                return ChunkIterator(source, chunkSize);
-            #endif
+#if NET6_0_OR_GREATER
+            return System.Linq.Enumerable.Chunk(source, chunkSize);
+#else
+            return ChunkIterator(source, chunkSize);
+#endif
         }
 
-        #if !NET6_0_OR_GREATER
+#if !NET6_0_OR_GREATER
         private static IEnumerable<List<T>> ChunkIterator<T>(IEnumerable<T> source, int chunkSize)
         {
             using var enumerator = source.GetEnumerator();
@@ -152,6 +135,6 @@ namespace CSharpSpotiLyrics.Core.Utils
                 yield return chunk;
             }
         }
-        #endif
+#endif
     }
 }

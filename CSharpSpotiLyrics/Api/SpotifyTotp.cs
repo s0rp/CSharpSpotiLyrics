@@ -2,7 +2,7 @@
 Author : s*rp
 Purpose Of File : Fetching Hash Table & Totp secrets.
 Date : 24.04.2025
-Update: 04.08.2026 & 29.08.2026
+Update: 29.08.2026 & 01.09.2026
 Supervisor : Dixiz 3A Neural (Coder MoE)
 - MAJOR UPDT FROM 04.08.2026:
     - Removed playwright usage (Package removed).
@@ -17,6 +17,9 @@ Supervisor : Dixiz 3A Neural (Coder MoE)
     - Migrated Console.WriteLine to Microsoft.Extensions.Logging.ILogger.
     - Added Regex timeouts to mitigate ReDoS vulnerabilities.
     - Integrated SemaphoreSlim to throttle concurrent JS downloads.
+- UPDT FROM 01.09.2026:
+    - Native Aot compatible (net8.0) 
+
  */
 
 using System;
@@ -31,6 +34,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using CSharpSpotiLyrics.Core.Models;
 
 namespace CSharpSpotiLyrics.Core.Api
 {
@@ -44,14 +48,14 @@ namespace CSharpSpotiLyrics.Core.Api
 
         public class TotpReturn
         {
-            public string Totp { get; set; }
+            public string Totp { get; set; } = string.Empty;
             public int Version { get; set; }
             public bool isCached { get; set; }
         }
 
         public class SecretVersionJSON
         {
-            public string Secret { get; set; }
+            public string? Secret { get; set; }
             public int Version { get; set; }
         }
 
@@ -105,11 +109,10 @@ namespace CSharpSpotiLyrics.Core.Api
             SecretVersionJSON? cache = null;
             try
             {
-                // Atomic file reading to prevent TOCTOU race conditions
                 string? cachedText = File.ReadAllText(TotpFilePath);
                 if (!string.IsNullOrEmpty(cachedText) && !forceNew)
                 {
-                    cache = JsonSerializer.Deserialize<SecretVersionJSON>(cachedText);
+                    cache = JsonHelper.Deserialize(cachedText, SpotiLyricsJsonContext.Default.SecretVersionJSON);
                 }
             }
             catch { cache = null; }
@@ -126,7 +129,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 {
                     extractedData = new SecretVersionJSON
                     {
-                        Secret = Base64Decode(cache.Secret),
+                        Secret = Base64Decode(cache.Secret!),
                         Version = cache.Version,
                     };
                 }
@@ -175,7 +178,6 @@ namespace CSharpSpotiLyrics.Core.Api
 
                 string html = await _httpClient.GetStringAsync("https://open.spotify.com");
 
-                // Compiled Regex with a 2-second Timeout to mitigate ReDoS vulnerabilities
                 var jsUrlRegex = new Regex(@"(https://[^/]+/cdn/build/web-player/[^""'\s>]+\.js|/cdn/build/web-player/[^""'\s>]+\.js)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
                 var jsUrls = jsUrlRegex.Matches(html)
                     .Cast<Match>()
@@ -191,7 +193,7 @@ namespace CSharpSpotiLyrics.Core.Api
                 var secretRegex = new Regex(@"secret:\s*([""'])(?<secret>(?:(?!\1)[^\\]|\\.)*)\1\s*,\s*version:\s*(?<version>\d+)", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
                 var hashRegex = new Regex(@"[""'](?<op>[a-zA-Z0-9_]+)[""']\s*,\s*[""'](?:query|mutation)[""']\s*,\s*[""'](?<hash>[a-f0-9]{64})[""']", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
-                using var throttler = new SemaphoreSlim(3, 3); // Throttles parallel downloads to avoid RAM spikes
+                using var throttler = new SemaphoreSlim(3, 3);
                 var tasks = jsUrls.Select(async url =>
                 {
                     await throttler.WaitAsync();
@@ -244,17 +246,17 @@ namespace CSharpSpotiLyrics.Core.Api
 
                 if (queryHashes.Count > 0)
                 {
-                    File.WriteAllText(HashPath, JsonSerializer.Serialize(queryHashes));
+                    File.WriteAllText(HashPath, JsonHelper.Serialize(queryHashes, SpotiLyricsJsonContext.Default.DictionaryStringString));
                     logger?.LogInformation("Hashes Saved To '{HashPath}'", HashPath);
                 }
 
                 if (!string.IsNullOrEmpty(bestSecret))
                 {
-                    File.WriteAllText(TotpFilePath, JsonSerializer.Serialize(new SecretVersionJSON
+                    File.WriteAllText(TotpFilePath, JsonHelper.Serialize(new SecretVersionJSON
                     {
                         Secret = Base64Encode(bestSecret),
                         Version = bestVersion,
-                    }));
+                    }, SpotiLyricsJsonContext.Default.SecretVersionJSON));
                     logger?.LogInformation("TOTP Secret Saved To '{TotpFilePath}'", TotpFilePath);
                 }
             }

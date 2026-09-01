@@ -44,7 +44,7 @@ namespace CSharpSpotiLyrics.Core.Models
         public bool IsDenseTypeface { get; set; }
 
         [JsonPropertyName("alternatives")]
-        public List<object>? Alternatives { get; set; } // Define further if needed
+        public List<object>? Alternatives { get; set; }
 
         [JsonPropertyName("language")]
         public string? Language { get; set; }
@@ -62,19 +62,19 @@ namespace CSharpSpotiLyrics.Core.Models
     public class LyricsLine
     {
         [JsonPropertyName("startTimeMs")]
-        public string? StartTimeMs { get; set; } // Keep as string for flexibility, parse to long/int when needed
+        public string? StartTimeMs { get; set; } 
 
         [JsonPropertyName("words")]
         public string? Words { get; set; }
 
         [JsonPropertyName("syllables")]
-        public List<object>? Syllables { get; set; } // Define further if needed
+        public List<object>? Syllables { get; set; }
 
         [JsonPropertyName("endTimeMs")]
         public string? EndTimeMs { get; set; }
     }
 
-    public class ColorData // Example structure, adjust if needed
+    public class ColorData
     {
         [JsonPropertyName("background")]
         public int? Background { get; set; }

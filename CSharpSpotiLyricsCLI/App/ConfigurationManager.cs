@@ -15,13 +15,6 @@ namespace CSharpSpotiLyrics.Console.App
         private static readonly string ConfigFileName = "config.json";
         private static string? _configFilePath;
 
-        private static readonly JsonSerializerOptions JsonOptions =
-            new()
-            {
-                WriteIndented = true,
-                PropertyNameCaseInsensitive = true // Be lenient on load
-            };
-
         public static string GetConfigFilePath()
         {
             if (_configFilePath == null)
@@ -34,7 +27,7 @@ namespace CSharpSpotiLyrics.Console.App
                         "CSharpSpotiLyrics"
                     );
                 }
-                else // Linux/macOS
+                else
                 {
                     configDir = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -42,7 +35,7 @@ namespace CSharpSpotiLyrics.Console.App
                         "CSharpSpotiLyrics"
                     );
                 }
-                Directory.CreateDirectory(configDir); // Ensure it exists
+                Directory.CreateDirectory(configDir);
                 _configFilePath = Path.Combine(configDir, ConfigFileName);
             }
             return _configFilePath;
@@ -64,14 +57,12 @@ namespace CSharpSpotiLyrics.Console.App
                 var defaultConfig = Config.Default;
                 SaveConfig(defaultConfig);
                 return defaultConfig;
-                // Or throw? Maybe returning default is better first run experience.
-                // throw new FileNotFoundException("Config file not found.", filePath);
             }
 
             try
             {
                 string json = File.ReadAllText(filePath);
-                var config = JsonSerializer.Deserialize<Config>(json, JsonOptions);
+                var config = JsonSerializer.Deserialize(json, CliJsonContext.Default.Config);
                 return config
                     ?? throw new CorruptedConfigException(
                         $"Failed to deserialize config file: {filePath}"
@@ -95,12 +86,11 @@ namespace CSharpSpotiLyrics.Console.App
             string filePath = GetConfigFilePath();
             try
             {
-                string json = JsonSerializer.Serialize(config, JsonOptions);
+                string json = JsonSerializer.Serialize(config, CliJsonContext.Default.Config);
                 File.WriteAllText(filePath, json);
             }
             catch (Exception ex)
             {
-                // Log error
                 System.Console.Error.WriteLine($"Error saving config to {filePath}: {ex.Message}");
                 throw new ApplicationException($"Failed to save config file: {filePath}", ex);
             }
@@ -115,7 +105,7 @@ namespace CSharpSpotiLyrics.Console.App
             Config currentConfig = reset
                 ? Config.Default
                 : (ConfigExists() ? LoadConfig() : Config.Default);
-            Config newConfig = new(); // Start with empty to copy over edited values
+            Config newConfig = new();
 
             newConfig.SpDc = AskInput("Enter the sp_dc:", currentConfig.SpDc, isSensitive: true);
             newConfig.DownloadPath = AskInput(
@@ -187,7 +177,7 @@ namespace CSharpSpotiLyrics.Console.App
                 }
                 if (inputStr.Equals(currentValue.ToString(), StringComparison.OrdinalIgnoreCase))
                 {
-                    return currentValue; // User pressed Enter or entered the same value
+                    return currentValue;
                 }
                 System.Console.WriteLine("Invalid input. Please enter 'true' or 'false'.");
             }
@@ -206,7 +196,6 @@ namespace CSharpSpotiLyrics.Console.App
 
             try
             {
-                // UseShellExecute allows opening with the default editor
                 ProcessStartInfo psi = new ProcessStartInfo(filePath) { UseShellExecute = true };
                 Process.Start(psi);
             }
@@ -215,19 +204,18 @@ namespace CSharpSpotiLyrics.Console.App
                 System.Console.Error.WriteLine(
                     $"Error opening config file '{filePath}': {ex.Message}"
                 );
-                // Fallback for Linux/macOS if UseShellExecute fails?
                 if (!OperatingSystem.IsWindows())
                 {
                     try
                     {
                         Process.Start("xdg-open", filePath);
-                    } // Common Linux command
+                    }
                     catch
                     {
                         try
                         {
                             Process.Start("open", filePath);
-                        } // Common macOS command
+                        }
                         catch
                         {
                             System.Console.Error.WriteLine(

@@ -36,19 +36,18 @@ namespace CSharpSpotiLyrics.Core.Models
         public FollowersObject? Followers { get; set; }
 
         [JsonPropertyName("country")]
-        public string? Country { get; set; } // From 'me' endpoint
+        public string? Country { get; set; }
 
         [JsonPropertyName("product")]
-        public string? Product { get; set; } // From 'me' endpoint
+        public string? Product { get; set; } 
 
         [JsonPropertyName("explicit_content")]
-        public ExplicitContentSettingsObject? ExplicitContent { get; set; } // From 'me' endpoint
+        public ExplicitContentSettingsObject? ExplicitContent { get; set; }
 
         [JsonPropertyName("email")]
-        public string? Email { get; set; } // From 'me' endpoint (if scope permits)
+        public string? Email { get; set; }
     }
 
-    // --- Helper classes used by SpotifyUser and potentially others ---
 
     public class ImageObjectt
     {
@@ -65,7 +64,7 @@ namespace CSharpSpotiLyrics.Core.Models
     public class FollowersObject
     {
         [JsonPropertyName("href")]
-        public string? Href { get; set; } // Always null in the followers object returned by Get User Profile
+        public string? Href { get; set; }
 
         [JsonPropertyName("total")]
         public int Total { get; set; }
